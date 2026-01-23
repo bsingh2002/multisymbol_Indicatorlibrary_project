@@ -458,27 +458,7 @@ ulong ProcessTradeOpen(string CurrentSymbol, ENUM_ORDER_TYPE OrderType, int ID, 
       Print("Lot calc failed for ", CurrentSymbol, " - skipping trade.");
       return 0;
    }
-   
-   Print("STEP1 LOTS ", CurrentSymbol,
-      " Lots=", DoubleToString(Lots, 2),
-      " ATR=", DoubleToString(AtrValue, 6),
-      " Price=", DoubleToString(Price, SymbolDigits),
-      " SL=", DoubleToString(StopLossPrice, SymbolDigits));
-
-   
-      Print("RISK LOTS ", CurrentSymbol,
-         " Equity=", DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2),
-         " Risk%=", DoubleToString(RiskPercent*100.0, 2),
-         " Lots=", DoubleToString(Lots, 2));
-
-
-   
-   // Optional debug (keep for now)
-   Print("OPEN ", CurrentSymbol,
-         " ATR=", DoubleToString(AtrValue, 6),
-         " Price=", DoubleToString(Price, SymbolDigits),
-         " SL=", DoubleToString(StopLossPrice, SymbolDigits),
-         " TP=", DoubleToString(TakeProfitPrice, SymbolDigits));
+  
 
         
    //Close any current positions and open new position
