@@ -59,9 +59,19 @@ ulong           TicketNumber[];
 //Expert Variables
 string ExpertComments = "";
 int    TicksReceived  =  0;
+int HandleAtr[];   // ATR handle per symbol
+
 
 //Risk Metrics
-input double LotSize = 0.1;
+input bool   RiskCompounding = false; // false = use StartingEquity, true = use current equity
+input double RiskPercent     = 0.01;  // 0.01 = 1% risk per trade
+double       StartingEquity  = 0.0;
+
+// ATR SL/TP inputs
+input int    AtrPeriod      = 14;
+input double AtrLossMulti   = 1.0;  // ATR - SL
+input double AtrProfitMulti = 2.0;  // ATR - TP
+
 
 //+------------------------------------------------------------------+
 //| Indicator String Setup                                           |
@@ -116,6 +126,23 @@ string IndicatorX1 = (InputEnumF1 == F1_NA) ? "Na" : EnumToString(InputEnumF1);
 string IndicatorSignalX1;
 int    IndicatorHandleX1[];
 
+double GetAtrConfirmed(int atrHandle)
+{
+   double buf[];
+   // Copy 3 values from shift 0:
+   // buf[0] = current forming bar
+   // buf[1] = last closed bar  <-- we want this
+   // buf[2] = older bar
+   if(CopyBuffer(atrHandle, 0, 0, 3, buf) <= 0)
+   {
+      Print("ATR CopyBuffer failed. err=", GetLastError());
+      return 0.0;
+   }
+
+   return buf[1];
+}
+
+
 //+------------------------------------------------------------------+
 //| Expert initialization function                                   |
 //+------------------------------------------------------------------+
@@ -123,6 +150,8 @@ int OnInit()
 {
    //Initiate C Trade
    InitiateTrade(MagicNumber);
+   
+   StartingEquity = AccountInfoDouble(ACCOUNT_EQUITY);
    
    //Set up multi-symbol EA Tradable Symbols
    InitMultiSymbol();
@@ -170,7 +199,11 @@ void OnTick()
       {
          //Add to tick processed counter and store last tick processed for symbol
          TicksProcessed[SymbolLoop]++; 
-         TimeLastTickProcessed[SymbolLoop]  = iTime(CurrentSymbol,Period(),0);      
+         TimeLastTickProcessed[SymbolLoop]  = iTime(CurrentSymbol,Period(),0);  
+         
+         double atr = GetAtrConfirmed(HandleAtr[SymbolLoop]);
+          //Print("ATR confirmed for ", CurrentSymbol, " = ", DoubleToString(atr, 6));
+    
          
          //Get any open position directions, reset on each run
          string PositionDirection = "NA";                  
@@ -189,6 +222,7 @@ void OnTick()
          IndicatorSignalF1 = GetIndicatorFilter(IndicatorF1,  IndicatorHandleF1[SymbolLoop], CurrentSymbol, Period());
          IndicatorSignalF2 = GetIndicatorFilter(IndicatorF2,  IndicatorHandleF2[SymbolLoop], CurrentSymbol, Period());
          IndicatorSignalX1 = GetIndicatorTrigger(IndicatorX1, IndicatorHandleX1[SymbolLoop], CurrentSymbol, Period());
+         
                      
          //Enter Long Trades
          if(
@@ -198,7 +232,7 @@ void OnTick()
             (IndicatorSignalF2 == "Long"  || IndicatorSignalF2 == "NA")    //enter on long filter or no filter indicator is selected
          )
          {
-            TicketNumber[SymbolLoop] = ProcessTradeOpen(CurrentSymbol, ORDER_TYPE_BUY, MagicNumber, LotSize); //Open positions and store ticket
+            TicketNumber[SymbolLoop] = ProcessTradeOpen(CurrentSymbol, ORDER_TYPE_BUY,MagicNumber,atr);       //Open positions and store ticket
             PositionDirection        = "Long";                                                                //Store position direction
          }        
          //Enter Short Trades
@@ -209,7 +243,7 @@ void OnTick()
             (IndicatorSignalF2 == "Short" || IndicatorSignalF2 == "NA")    //enter on short filter or no filter indicator is selected
          )
          {
-            TicketNumber[SymbolLoop] = ProcessTradeOpen(CurrentSymbol, ORDER_TYPE_SELL, MagicNumber, LotSize); //Open positions and store ticket
+            TicketNumber[SymbolLoop] = ProcessTradeOpen(CurrentSymbol, ORDER_TYPE_SELL, MagicNumber, atr);     //Open positions and store ticket
             PositionDirection        = "Short";                                                                //Store position direction
          }     
          //Exit Trades  
@@ -288,6 +322,7 @@ void ResizeIndicatorArrays()
    ArrayResize(IndicatorHandleF1, NumberOfTradeableSymbols);
    ArrayResize(IndicatorHandleF2, NumberOfTradeableSymbols);
    ArrayResize(IndicatorHandleX1, NumberOfTradeableSymbols);
+   ArrayResize(HandleAtr,         NumberOfTradeableSymbols);
 }
 
 //Release indicator handles from Metatrader cache for multi-symbol EA
@@ -299,6 +334,7 @@ void ReleaseIndicatorHandles()
       IndicatorRelease(IndicatorHandleF1[SymbolLoop]);
       IndicatorRelease(IndicatorHandleF2[SymbolLoop]);
       IndicatorRelease(IndicatorHandleX1[SymbolLoop]);
+      IndicatorRelease(HandleAtr[SymbolLoop]);
    }
    Print("Handle released for all symbols");   
 }
@@ -312,6 +348,14 @@ bool InitIndicatorHanldes()
       IndicatorHandleF1[SymbolLoop] = GetIndicatorHandle(IndicatorF1, SymbolArray[SymbolLoop],Period());
       IndicatorHandleF2[SymbolLoop] = GetIndicatorHandle(IndicatorF2, SymbolArray[SymbolLoop],Period());
       IndicatorHandleX1[SymbolLoop] = GetIndicatorHandle(IndicatorX1, SymbolArray[SymbolLoop],Period());
+      
+      // ATR handle per symbol
+      HandleAtr[SymbolLoop] = iATR(SymbolArray[SymbolLoop], Period(), AtrPeriod);
+      if(HandleAtr[SymbolLoop] == INVALID_HANDLE)
+      {
+         Print("Failed to create ATR handle for ", SymbolArray[SymbolLoop], " err=", GetLastError());
+         return false;
+      }
    }
    return true;     
 }
@@ -327,8 +371,52 @@ void InitiateTrade(int ID)
    return;  
 }
 
+double CalcRiskLots(string symbol, double entryPrice, double stopLossPrice)
+{
+   // How much money you want to risk
+   double equityForRisk = RiskCompounding ? AccountInfoDouble(ACCOUNT_EQUITY) : StartingEquity;
+   double riskMoney     = equityForRisk * RiskPercent;
+
+   // Symbol properties
+   double tickSize   = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+   double tickValue  = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+   int    digits     = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+
+   // Some brokers quote tickValue differently for 3/2-digit symbols (JPY pairs etc.)
+   if(digits <= 3)
+      tickValue /= 100.0;
+
+   double point      = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   double ticksPerPoint = tickSize / point;
+   double pointValue    = tickValue / ticksPerPoint; // money per 1 point, per 1 lot
+
+   // Stop distance in ticks
+   double stopTicks = MathAbs((entryPrice - stopLossPrice) / tickSize);
+   if(stopTicks <= 0)
+      return 0.0;
+
+   // Raw lot size
+   double lots = riskMoney / (stopTicks * pointValue);
+
+   // Normalize to broker volume rules
+   double volMin  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double volMax  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   double volStep = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+
+   // Round down to step (safer than rounding up)
+   lots = MathFloor(lots / volStep) * volStep;
+
+   // Clamp
+   if(lots < volMin) lots = volMin;
+   if(lots > volMax) lots = volMax;
+
+   return lots;
+}
+
+
 //Process trades function - Fixed Lot Position Size, No SL/TP
-ulong ProcessTradeOpen(string CurrentSymbol, ENUM_ORDER_TYPE OrderType, int ID, double Risk) export
+ulong ProcessTradeOpen(string CurrentSymbol, ENUM_ORDER_TYPE OrderType, int ID, double AtrValue) export
+
 {
    //Set symbol string and variables 
    int    SymbolDigits    = (int) SymbolInfoInteger(CurrentSymbol,SYMBOL_DIGITS); //note - typecast required to remove error
@@ -345,11 +433,58 @@ ulong ProcessTradeOpen(string CurrentSymbol, ENUM_ORDER_TYPE OrderType, int ID, 
    {
       Price = NormalizeDouble(SymbolInfoDouble(CurrentSymbol, SYMBOL_BID), SymbolDigits);
    }
+   
+    if(AtrValue <= 0.0)
+   {
+      Print("ATR not ready for ", CurrentSymbol, " - skipping trade open.");
+      return 0;
+   }
+   
+   if(OrderType == ORDER_TYPE_BUY)
+   {
+      StopLossPrice   = NormalizeDouble(Price - (AtrValue * AtrLossMulti), SymbolDigits);
+      TakeProfitPrice = NormalizeDouble(Price + (AtrValue * AtrProfitMulti), SymbolDigits);
+   }
+   else if(OrderType == ORDER_TYPE_SELL)
+   {
+      StopLossPrice   = NormalizeDouble(Price + (AtrValue * AtrLossMulti), SymbolDigits);
+      TakeProfitPrice = NormalizeDouble(Price - (AtrValue * AtrProfitMulti), SymbolDigits);
+   }
+   
+   // --- NNFX risk-based lot sizing (uses ATR stop distance) ---
+   double Lots = CalcRiskLots(CurrentSymbol, Price, StopLossPrice);
+   if(Lots <= 0.0)
+   {
+      Print("Lot calc failed for ", CurrentSymbol, " - skipping trade.");
+      return 0;
+   }
+   
+   Print("STEP1 LOTS ", CurrentSymbol,
+      " Lots=", DoubleToString(Lots, 2),
+      " ATR=", DoubleToString(AtrValue, 6),
+      " Price=", DoubleToString(Price, SymbolDigits),
+      " SL=", DoubleToString(StopLossPrice, SymbolDigits));
+
+   
+      Print("RISK LOTS ", CurrentSymbol,
+         " Equity=", DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2),
+         " Risk%=", DoubleToString(RiskPercent*100.0, 2),
+         " Lots=", DoubleToString(Lots, 2));
+
+
+   
+   // Optional debug (keep for now)
+   Print("OPEN ", CurrentSymbol,
+         " ATR=", DoubleToString(AtrValue, 6),
+         " Price=", DoubleToString(Price, SymbolDigits),
+         " SL=", DoubleToString(StopLossPrice, SymbolDigits),
+         " TP=", DoubleToString(TakeProfitPrice, SymbolDigits));
+
         
    //Close any current positions and open new position
    Trade.PositionClose(CurrentSymbol);
    Trade.SetExpertMagicNumber(ID);  
-   Trade.PositionOpen(CurrentSymbol,OrderType,Risk,Price,StopLossPrice,TakeProfitPrice,__FILE__);
+   Trade.PositionOpen(CurrentSymbol,OrderType,Lots,Price,StopLossPrice,TakeProfitPrice,__FILE__);
    
    
    //Get Position Ticket Number - run through open positions and store ticket number whcih matches with current symbol
@@ -365,7 +500,7 @@ ulong ProcessTradeOpen(string CurrentSymbol, ENUM_ORDER_TYPE OrderType, int ID, 
       }
    
    //Print successful
-   Print("Trade Processed For Ticket ", Ticket, " Symbol ", CurrentSymbol," OrderType ",OrderType, " Lot Size ", LotSize);
+   Print("Trade Processed For Ticket ", Ticket, " Symbol ", CurrentSymbol," OrderType ",OrderType, " Lot Size ", Lots);
    
    return(Ticket);
 }
