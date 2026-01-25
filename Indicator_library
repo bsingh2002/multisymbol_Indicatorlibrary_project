@@ -59,6 +59,8 @@
 //|---OSCILLATOR INDICATORS                                          |
 //|   Macd_A_Fast_Slow_Signal - Trigger, Filter - [A,B]              |
 //|   Ac_A - Trigger, Filter - [A,B]                                 |
+//|   Doda_A_Slw_Pds_Signal - Trigger, Filter - [A,B]                |
+//|   Pfe_A_Period_UseAverage_MaPeriod - Trigger, Filter - [A,B]     | 
 //|---PRICE ACTION INDICATORS                                        |
 //|   Don_A_Period - Trigger - [A]                                   |
 //|---OTHER INDICATORS                                               |
@@ -68,7 +70,7 @@
 #property copyright "Copyright 2024, Dillon Grech"
 #property version   "1.04"
 //+------------------------------------------------------------------+
-//| Set up Inidcator Handle                                          |
+//| Set up Indicator Handle                                          |
 //+------------------------------------------------------------------+
 int GetIndicatorHandle(string Indicator, string CurrentSymbol, ENUM_TIMEFRAMES CurrentPeriod) export
 {
@@ -309,6 +311,46 @@ int GetIndicatorHandle(string Indicator, string CurrentSymbol, ENUM_TIMEFRAMES C
       //Return value
       return Handle;
    }
+   
+   
+   //Doda Stochastic Modified (Custom)
+   //Doda_A_Slw_Pds_SlwSignal
+   if(IndicatorArray[0] == "Doda")
+   {
+      int slw       = StringToInteger(IndicatorArray[2]);
+      int pds       = StringToInteger(IndicatorArray[3]);
+      int slwSignal = StringToInteger(IndicatorArray[4]);
+   
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\DodaStochastic_Modified", slw, pds, slwSignal);
+   
+      if(Handle == INVALID_HANDLE)
+         MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+   
+      return Handle;
+   }
+   
+   //PFE (Polarized Fractal Efficiency) - Custom
+   //Pfe_A_Period_UseAverage_MaPeriod
+   if(IndicatorArray[0] == "Pfe")
+   {
+      int  pfePeriod  = StringToInteger(IndicatorArray[2]);
+      bool useAverage = (StringToInteger(IndicatorArray[3]) != 0);
+      int  maPeriod   = StringToInteger(IndicatorArray[4]);
+   
+      Handle = iCustom(CurrentSymbol, CurrentPeriod,
+                       "Custom\\polarized-fractal-efficiency",
+                       pfePeriod, useAverage, maPeriod);
+   
+      if(Handle == INVALID_HANDLE)
+         MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol +
+                    ". Error Code " + IntegerToString(GetLastError()));
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+   
+      return Handle;
+   }
 
 //---PRICE ACTION INDICATORS
    //Donchian Channel
@@ -332,6 +374,8 @@ int GetIndicatorHandle(string Indicator, string CurrentSymbol, ENUM_TIMEFRAMES C
       Print("No Handle created for " + Indicator + " for " + CurrentSymbol + ". Handle ID ",Handle,".");
       return 0;
    }
+   
+   
 }
 //+------------------------------------------------------------------+
 //Set up Indicator Trigger Signals
@@ -712,6 +756,72 @@ string GetIndicatorTrigger(string Indicator, int IndicatorHandle, string Current
          return   "Error";
       }
    }
+   
+   //Doda Stochastic Modified Trigger
+   //Buffers: 0=Filtered, 1=Signal
+   //A: Filtered crosses above Signal = Long, crosses below = Short
+   //B: Inverted
+   if(IndicatorArray[0] == "Doda")
+   {
+      double bufF[], bufS[];
+   
+      bool okF = CopyBuffer(IndicatorHandle, 0, 0, 3, bufF);
+      bool okS = CopyBuffer(IndicatorHandle, 1, 0, 3, bufS);
+   
+      if(!okF || !okS)
+         return "Fill Error";
+   
+      double curF = NormalizeDouble(bufF[1], 10);
+      double curS = NormalizeDouble(bufS[1], 10);
+      double preF = NormalizeDouble(bufF[0], 10);
+      double preS = NormalizeDouble(bufS[0], 10);
+   
+      if(IndicatorArray[1] == "A")
+      {
+         if(preF <= preS && curF > curS) return "Long";
+         if(preF >= preS && curF < curS) return "Short";
+         return "No Trade";
+      }
+      else if(IndicatorArray[1] == "B")
+      {
+         if(preF <= preS && curF > curS) return "Short";
+         if(preF >= preS && curF < curS) return "Long";
+         return "No Trade";
+      }
+   
+      return "Error";
+   }
+   
+   //PFE Trigger (zero line cross)
+   //Buffers: 0 = PFE
+   //A: Cross above 0 = Long, cross below 0 = Short
+   //B: Inverted
+   if(IndicatorArray[0] == "Pfe")
+   {
+      double buf[];
+      bool ok = CopyBuffer(IndicatorHandle, 0, 0, 3, buf); // [prior,current,new] style
+      if(!ok)
+         return "Fill Error";
+   
+      double cur = NormalizeDouble(buf[1], 10); // confirmed bar
+      double pre = NormalizeDouble(buf[0], 10); // previous
+   
+      if(IndicatorArray[1] == "A")
+      {
+         if(pre <= 0.0 && cur > 0.0) return "Long";
+         if(pre >= 0.0 && cur < 0.0) return "Short";
+         return "No Trade";
+      }
+      else if(IndicatorArray[1] == "B")
+      {
+         if(pre <= 0.0 && cur > 0.0) return "Short";
+         if(pre >= 0.0 && cur < 0.0) return "Long";
+         return "No Trade";
+      }
+   
+      return "Error";
+   }
+
 
 //---PRICE ACTION INDICATORS
    //Doncian trigger signal cross with price and no new high or low
@@ -1043,6 +1153,36 @@ string GetIndicatorFilter(string Indicator, int IndicatorHandle, string CurrentS
          return   "Error";
       }
    }
+   
+   //PFE Filter (above/below zero)
+   //Buffers: 0 = PFE
+   //A: PFE > 0 = Long, PFE < 0 = Short
+   //B: Inverted
+   if(IndicatorArray[0] == "Pfe")
+   {
+      double buf[];
+      bool ok = CopyBuffer(IndicatorHandle, 0, 1, 1, buf); // bar 1 (confirmed)
+      if(!ok)
+         return "Fill Error";
+   
+      double cur = NormalizeDouble(buf[0], 10);
+   
+      if(IndicatorArray[1] == "A")
+      {
+         if(cur > 0.0) return "Long";
+         if(cur < 0.0) return "Short";
+         return "No Trade";
+      }
+      else if(IndicatorArray[1] == "B")
+      {
+         if(cur > 0.0) return "Short";
+         if(cur < 0.0) return "Long";
+         return "No Trade";
+      }
+   
+      return "Error";
+   }
+
 
    //Accelerator Oscillator
    //A: AC line moves over with 0 line (long) or AC line moves under 0 line (short)
@@ -1098,6 +1238,41 @@ string GetIndicatorFilter(string Indicator, int IndicatorHandle, string CurrentS
          return   "Error";
       }
    }
+   
+   //---OSCILLATOR INDICATORS
+//Doda Stochastic Modified Filter
+//Buffers: 0=Filtered, 1=Signal
+//A: Filtered > Signal = Long, Filtered < Signal = Short
+//B: Inverted
+if(IndicatorArray[0] == "Doda")
+{
+   double bufF[], bufS[];
+
+   bool okF = CopyBuffer(IndicatorHandle, 0, 1, 1, bufF); // bar 1 (confirmed)
+   bool okS = CopyBuffer(IndicatorHandle, 1, 1, 1, bufS); // bar 1 (confirmed)
+
+   if(!okF || !okS)
+      return "Fill Error";
+
+   double curF = NormalizeDouble(bufF[0], 10);
+   double curS = NormalizeDouble(bufS[0], 10);
+
+   if(IndicatorArray[1] == "A")
+   {
+      if(curF > curS) return "Long";
+      if(curF < curS) return "Short";
+      return "No Trade";
+   }
+   else if(IndicatorArray[1] == "B")
+   {
+      if(curF > curS) return "Short";
+      if(curF < curS) return "Long";
+      return "No Trade";
+   }
+
+   return "Error";
+}
+
 
 //---PRICE ACTION INDICATORS
 //---OTHER INDICATORS
