@@ -11,17 +11,26 @@
 //| indicators. Indicator signals are taked from Indicator Library.  |
 //| EA will use enums so user can select the indicator and params.   |
 //+------------------------------------------------------------------+
-//|                                                    Patch Notes 1 |
-//| Completed version for the youtube tutorial.                      |
+//|                                                  PATCH (by ChatGPT)|
+//| SINGLE POSITION per signal + Toggleable Simple Win-Rate Mode:    |
 //|                                                                  |
+//| SimpleWinRateMode = true:                                        |
+//| - 1 position per signal                                          |
+//| - broker SL + broker TP1 (1.0x ATR0)                             |
+//| - if TP1 hit -> full close (WIN)                                 |
+//| - if SL hit  -> full close (LOSS)                                |
+//| - no partial, no BE, no trailing                                 |
 //|                                                                  |
+//| SimpleWinRateMode = false (FULL NNFX):                           |
+//| - 1 position per signal                                          |
+//| - NO broker TP (TP1 emulated)                                    |
+//| - TP1 hit: close half (if possible), SL -> BE                    |
+//| - close beyond 2x ATR0: trailing SL at 1.5x ATR0                 |
+//| - management occurs on confirmed candle close (new bar)          |
 //|                                                                  |
-//+------------------------------------------------------------------+
-//|                                              Strategy Conditions |
-//| Long & short trades, 1x EntryTrigger, 2x Filter, 1x Exit Trigger |
-//| Fixed position size and no stop loss (exit on exit trigger).     |
-//| Exit trigger is also filter indicator 1.                         |
-//|                                                                  |
+//| Added OnTester() custom criterion:                               |
+//| - Returns WinRate% if trades >= MinTradesForWinRate              |
+//| - Otherwise returns 0 and prints "Not enough data..."            |
 //+------------------------------------------------------------------+
 
 #property copyright "Copyright 2024, Dillon Grech"
@@ -30,7 +39,7 @@
 //+------------------------------------------------------------------+
 //| Expert Setup                                                     |
 //+------------------------------------------------------------------+
-//Libraries
+
 #import "IndicatorLibrary.ex5"
    int    GetIndicatorHandle(string Indicator, string CurrentSymbol, ENUM_TIMEFRAMES CurrentPeriod);
    string GetIndicatorTrigger(string Indicator, int IndicatorHandle, string CurrentSymbol, ENUM_TIMEFRAMES CurrentPeriod);
@@ -38,371 +47,167 @@
    double GetIndicatorValue(int IndicatorHandle, int BufferValue);
 #import
 
-//Include
-#include  <Trade\Trade.mqh> //Include MQL trade object functions
-CTrade    *Trade;           //Declaire Trade as pointer to CTrade class
+#include <Trade\Trade.mqh>
+CTrade *Trade;
 
 //Select expert magic number
 input int MagicNumber = 1;  //Unique Identifier
 
-//Multi-Symbol EA Variables - User can specify "Current" within input to trade current symbol only
+// Multi-symbol: User can specify "Current" within input to trade current symbol only
 input string AllTradableSymbols = "AUDJPY|CHFJPY|EURJPY|GBPJPY|USDJPY|AUDCHF|CADCHF|EURCHF|GBPCHF|USDCHF|AUDCAD|USDCAD|AUDUSD|EURUSD|GBPUSD|NZDUSD|AUDNZD|EURGBP";
 int    NumberOfTradeableSymbols;
 string SymbolArray[];
 
-//Expert Core Arrays
+// Expert Core Arrays
 string          SymbolMetrics[];
 ulong           TicksProcessed[];
 static datetime TimeLastTickProcessed[];
-ulong           TicketNumber[];
+ulong           TicketNumber[]; // stores main position ticket
 
-//Expert Variables
+// Expert Variables
 string ExpertComments = "";
 int    TicksReceived  =  0;
-int HandleAtr[];   // ATR handle per symbol
+int    HandleAtr[]; // ATR handle per symbol
 
-
-//Risk Metrics
+// Risk Metrics
 input bool   RiskCompounding = false; // false = use StartingEquity, true = use current equity
-input double RiskPercent     = 0.01;  // 0.01 = 1% risk per trade
+input double RiskPercent     = 0.01;  // Total risk per SIGNAL (single position). 0.01 = 1%
 double       StartingEquity  = 0.0;
 
-// ATR SL/TP inputs
-input int    AtrPeriod      = 14;
-input double AtrLossMulti   = 1.0;  // ATR - SL
-input double AtrProfitMulti = 2.0;  // ATR - TP
+// ATR period
+input int    AtrPeriod = 14;
 
+// --- NNFX management params (FULL mode) ---
+input double AtrSL_Multi         = 1.5; // Initial SL distance = 1.5x ATR(entry)
+input double AtrTP1_Multi        = 1.0; // TP1 distance = 1.0x ATR(entry)
+input double AtrTrailStart_Multi = 2.0; // Start trailing when CLOSE beyond 2.0x ATR(entry)
+input double AtrTrailDist_Multi  = 1.5; // Trailing distance once active = 1.5x ATR(entry)
+
+// --- Toggle: Simple Win-Rate Test Mode ---
+input bool   SimpleWinRateMode   = false; // true = Simple Testing, TP1/SL full close only; false = full NNFX management
+
+// --- OnTester custom objective settings ---
+input int    MinTradesForWinRate = 20; // If fewer than this, OnTester() returns 0 and prints a "not enough data" message
 
 //+------------------------------------------------------------------+
 //| Indicator String Setup                                           |
 //+------------------------------------------------------------------+
-//Indicator Entry 1 String
-enum   INDICATORSE1 
+enum INDICATORSE1
 {
-    E1_NA, Doda_A_8_30_8, Doda_A_8_34_8, Doda_A_8_55_8, Doda_A_8_42_8, Doda_A_9_34_9, Doda_A_10_30_10, Doda_A_10_34_10, Doda_A_10_38_10, Doda_A_10_42_10, Doda_A_10_55_10, Doda_A_10_68_10, Doda_A_11_34_10, Doda_A_13_42_10, Doda_A_13_55_10, Doda_A_13_68_10, Doda_A_13_55_13, Doda_A_13_68_13, Doda_A_16_42_13, Doda_A_16_55_13
-
-
-    
-    
+   E1_NA,Pfe_A_6_1_3, Pfe_A_7_1_3, Pfe_A_6_1_5, Pfe_A_7_1_5, Pfe_A_8_1_5, Pfe_B_3_1_3, Pfe_B_4_1_3, Pfe_B_5_1_3, Pfe_A_19_1_5
 };
 input INDICATORSE1 InputEnumE1;
 
-//Indicator Filter 1 String
-enum   INDICATORSF1 
+enum INDICATORSF1
 {
-    F1_NA, Frama_A_100
-
-
-   
+   F1_NA,Doda_A_8_30_8, Doda_A_8_34_8, Doda_A_8_55_8, Doda_A_11_34_10, Doda_A_10_30_10, Doda_A_8_42_8, Doda_A_10_42_10, Doda_A_9_34_9, Doda_A_10_34_10, Doda_A_10_38_10, Doda_A_10_68_10, Doda_A_10_55_10, Doda_A_13_68_10, Doda_A_13_55_10, Doda_A_13_55_13, Doda_A_13_68_13, Doda_A_16_42_13, Doda_A_16_55_13, Doda_A_13_42_10
 };
 input INDICATORSF1 InputEnumF1;
 
-//Indicator Filter 2 String
-enum INDICATORSF2 
+enum INDICATORSF2
 {
-   F2_NA,Ema_B_10, Ema_B_11, Ema_B_12, Ema_B_13, Ema_B_14, Ema_B_40, Ema_B_45, Ema_B_65, Ema_B_70, Ema_B_75, Ema_B_90, Ema_B_100, Ema_B_120, Ema_B_150, Ema_B_300,
-   Smma_B_6, Smma_B_7, Smma_B_19, Smma_B_20, Smma_B_34, Smma_B_36, Smma_B_38,
-   Lwma_B_12, Lwma_B_22, Lwma_A_26, Lwma_B_60, Lwma_B_65, Lwma_B_70, Lwma_B_90, Lwma_B_100, Lwma_B_140,
-   Frama_A_12, Frama_A_13, Frama_A_14, Frama_A_48, Frama_A_50, Frama_A_55, Frama_B_22, Frama_B_26, Frama_B_34, Frama_B_85, Frama_B_95, Frama_B_100, Frama_B_110, Frama_B_120, Frama_B_220, Frama_B_240, Frama_B_260
-
-
+   F2_NA,Frama_B_100
 };
 input INDICATORSF2 InputEnumF2;
 
-//Indicator Filter 3 String (Volume / future filters)
 enum INDICATORSF3
 {
    F3_NA
-   
 };
 input INDICATORSF3 InputEnumF3;
 
 //+------------------------------------------------------------------+
 //| Indicator Setup                                                  |
 //+------------------------------------------------------------------+
-//Indicator Entry 1 Variables - Entry Trigger
 string IndicatorE1 = (InputEnumE1 == E1_NA) ? "Na" : EnumToString(InputEnumE1);
 string IndicatorSignalE1;
 int    IndicatorHandleE1[];
 
-//Indicator Filter 1 Variables
 string IndicatorF1 = (InputEnumF1 == F1_NA) ? "Na" : EnumToString(InputEnumF1);
 string IndicatorSignalF1;
 int    IndicatorHandleF1[];
 
-//Indicator Filter 2 Variables
 string IndicatorF2 = (InputEnumF2 == F2_NA) ? "Na" : EnumToString(InputEnumF2);
 string IndicatorSignalF2;
 int    IndicatorHandleF2[];
 
-//Indicator Filter 3 Variables
 string IndicatorF3 = (InputEnumF3 == F3_NA) ? "Na" : EnumToString(InputEnumF3);
 string IndicatorSignalF3;
 int    IndicatorHandleF3[];
 
-//Indicator Exit 1 Variables - Exit Trigger
+// Exit trigger is also filter indicator 1
 string IndicatorX1 = (InputEnumF1 == F1_NA) ? "Na" : EnumToString(InputEnumF1);
 string IndicatorSignalX1;
 int    IndicatorHandleX1[];
 
+//+------------------------------------------------------------------+
+//| NNFX per-symbol state (single position)                          |
+//+------------------------------------------------------------------+
+struct SymbolTradeState
+{
+   ulong  ticket;         // main position ticket
+   int    dir;            // 1=long, -1=short, 0=none
+
+   double atr0;           // frozen ATR at entry
+   double entry;          // actual filled open price
+
+   bool   tp1_done;       // TP1 reached + management done (FULL mode)
+   bool   be_set;         // SL at BE (FULL mode)
+   bool   trail_active;   // trailing active (FULL mode)
+
+   double last_sl;        // last applied SL
+
+   void Reset()
+   {
+      ticket = 0;
+      dir = 0;
+      atr0 = 0.0;
+      entry = 0.0;
+      tp1_done = false;
+      be_set = false;
+      trail_active = false;
+      last_sl = 0.0;
+   }
+};
+SymbolTradeState State[];
+
+//+------------------------------------------------------------------+
+//| Helpers                                                         |
+//+------------------------------------------------------------------+
 double GetAtrConfirmed(int atrHandle)
 {
    double buf[];
-   // Copy 3 values from shift 0:
-   // buf[0] = current forming bar
-   // buf[1] = last closed bar  <-- we want this
-   // buf[2] = older bar
    if(CopyBuffer(atrHandle, 0, 0, 3, buf) <= 0)
    {
       Print("ATR CopyBuffer failed. err=", GetLastError());
       return 0.0;
    }
-
-   return buf[1];
+   return buf[1]; // last closed bar
 }
 
-
-//+------------------------------------------------------------------+
-//| Expert initialization function                                   |
-//+------------------------------------------------------------------+
-int OnInit()
+double EquityForRisk()
 {
-   //Initiate C Trade
-   InitiateTrade(MagicNumber);
-   
-   StartingEquity = AccountInfoDouble(ACCOUNT_EQUITY);
-   
-   //Set up multi-symbol EA Tradable Symbols
-   InitMultiSymbol();
-
-   //Resize Arrays for Multi-Symbol EA
-   ResizeCoreArrays();   
-   
-   //Resize Indicator Arrays for Multi-Symbol EA
-   ResizeIndicatorArrays();
-
-   //Initiate indicator handles for multi-symbol
-   if(!InitIndicatorHanldes())
-       return(INIT_FAILED);
-      
-   return(INIT_SUCCEEDED);
+   return (RiskCompounding ? AccountInfoDouble(ACCOUNT_EQUITY) : StartingEquity);
 }
 
-//+------------------------------------------------------------------+
-//| Expert deinitialization function                                 |
-//+------------------------------------------------------------------+
-void OnDeinit(const int reason)
+double NormalizeLots(string symbol, double lots)
 {
-   //Release Indicator Arrays
-   ReleaseIndicatorHandles();
+   double volMin  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+   double volMax  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+   double volStep = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+
+   if(volStep <= 0.0) volStep = 0.01;
+
+   lots = MathFloor(lots / volStep) * volStep;
+
+   if(lots < volMin) lots = volMin;
+   if(lots > volMax) lots = volMax;
+
+   return lots;
 }
 
-//+------------------------------------------------------------------+
-//| Expert tick function                                             |
-//+------------------------------------------------------------------+
-void OnTick()
+double CalcLotsForRiskMoney(string symbol, ENUM_ORDER_TYPE type, double entry, double sl, double riskMoney)
 {
-   //Declare comment variables
-   ExpertComments="";
-   TicksReceived++;
-  
-   //Run multi-symbol loop   
-   for(int SymbolLoop=0; SymbolLoop < NumberOfTradeableSymbols; SymbolLoop++)
-   {
-      //Store symbol vairables
-      string CurrentSymbol = SymbolArray[SymbolLoop]; //Get current symbol
-
-      
-      //Check for new candle based of opening time of bar 
-      if(TimeLastTickProcessed[SymbolLoop] != iTime(CurrentSymbol,Period(),0))
-      {
-         //Add to tick processed counter and store last tick processed for symbol
-         TicksProcessed[SymbolLoop]++; 
-         TimeLastTickProcessed[SymbolLoop]  = iTime(CurrentSymbol,Period(),0);  
-         
-         double atr = GetAtrConfirmed(HandleAtr[SymbolLoop]);
-          //Print("ATR confirmed for ", CurrentSymbol, " = ", DoubleToString(atr, 6));
-    
-         
-         //Get any open position directions, reset on each run
-         string PositionDirection = "NA";                  
-         if(PositionSelectByTicket(TicketNumber[SymbolLoop]) == true)
-         {
-            if (PositionGetInteger(POSITION_TYPE) == 0)
-               PositionDirection = "Long";
-            else if (PositionGetInteger(POSITION_TYPE) == 1)
-               PositionDirection = "Short";
-         }
-         else
-            PositionDirection = "NA";
-           
-         //Get Indicator Signals
-         IndicatorSignalE1 = GetIndicatorTrigger(IndicatorE1, IndicatorHandleE1[SymbolLoop], CurrentSymbol, Period());
-         IndicatorSignalF1 = GetIndicatorFilter(IndicatorF1,  IndicatorHandleF1[SymbolLoop], CurrentSymbol, Period());
-         IndicatorSignalF2 = GetIndicatorFilter(IndicatorF2,  IndicatorHandleF2[SymbolLoop], CurrentSymbol, Period());
-         IndicatorSignalF3 = GetIndicatorFilter(IndicatorF3,  IndicatorHandleF3[SymbolLoop], CurrentSymbol, Period());
-         IndicatorSignalX1 = GetIndicatorTrigger(IndicatorX1, IndicatorHandleX1[SymbolLoop], CurrentSymbol, Period());
-         
-                     
-         //Enter Long Trades
-         if(
-            (PositionDirection == "Short" || PositionDirection == "NA") && //enter if no current trades or short trades
-            (IndicatorSignalE1 == "Long"                              ) && //enter on long trigger
-            (IndicatorSignalF1 == "Long"  || IndicatorSignalF1 == "NA") && //enter on long filter or no filter indicator is selected
-            (IndicatorSignalF2 == "Long"  || IndicatorSignalF2 == "NA") && //enter on long filter or no filter indicator is selected
-            (IndicatorSignalF3 == "Long"  || IndicatorSignalF3 == "NA")     //enter on long filter or no filter indicator is selected
-         )
-         {
-            TicketNumber[SymbolLoop] = ProcessTradeOpen(CurrentSymbol, ORDER_TYPE_BUY,MagicNumber,atr);       //Open positions and store ticket
-            PositionDirection        = "Long";                                                                //Store position direction
-         }        
-         //Enter Short Trades
-         else if(
-            (PositionDirection == "Long"  || PositionDirection == "NA") && //enter if no current trades or short trades
-            (IndicatorSignalE1 == "Short"                             ) && //enter on short trigger
-            (IndicatorSignalF1 == "Short" || IndicatorSignalF1 == "NA") && //enter on short filter or no filter indicator is selected
-            (IndicatorSignalF2 == "Short" || IndicatorSignalF2 == "NA") && //enter on short filter or no filter indicator is selected
-            (IndicatorSignalF3 == "Short" || IndicatorSignalF3 == "NA")    //enter on short filter or no filter indicator is selected
-         )
-         {
-            TicketNumber[SymbolLoop] = ProcessTradeOpen(CurrentSymbol, ORDER_TYPE_SELL, MagicNumber, atr);     //Open positions and store ticket
-            PositionDirection        = "Short";                                                                //Store position direction
-         }     
-         //Exit Trades  
-         else if(
-            (PositionDirection == "Long"  && IndicatorSignalX1 == "Short") || //exit long trades on exit indicator short signal
-            (PositionDirection == "Short" && IndicatorSignalX1 == "Long")     //exit short trades on exit indicator long signal
-         )
-         {   
-            ProcessTradeClose(CurrentSymbol,TicketNumber[SymbolLoop]);
-         }                          
-         //Update Symbol Metrics
-         SymbolMetrics[SymbolLoop] = CurrentSymbol + 
-                                     " | Ticks Processed: " + IntegerToString(TicksProcessed[SymbolLoop]) +
-                                     " | Last Candle: " + TimeToString(TimeLastTickProcessed[SymbolLoop]) +
-                                     " | Open Ticket: " + IntegerToString(TicketNumber[SymbolLoop]) +
-                                     " | Open Ticket Direction: " + PositionDirection +
-                                     " | Entry 1 (" + IntegerToString(IndicatorHandleE1[SymbolLoop])+") : " + IndicatorSignalE1 +
-                                     " | Filter 1 (" + IntegerToString(IndicatorHandleF1[SymbolLoop])+") : " + IndicatorSignalF1 +
-                                     " | Filter 2 (" + IntegerToString(IndicatorHandleF2[SymbolLoop])+") : " + IndicatorSignalF2 +
-                                     " | Exit 1 (" + IntegerToString(IndicatorHandleX1[SymbolLoop])+") : " + IndicatorSignalX1                     
-                                     ;
-      }
-      
-      //Update expert comments for each symbol
-      ExpertComments = ExpertComments + SymbolMetrics[SymbolLoop] + "\n\r";
-   }
-   //Comment expert behaviour
-   Comment("\n\rExpert: ", MagicNumber, "\n\r",
-            "MT5 Server Time: ", TimeCurrent(), "\n\r",
-            "Ticks Received: ", TicksReceived,"\n\r\n\r",  
-            "Symbols Traded:\n\r", 
-            ExpertComments
-            );
-}
-
-//+------------------------------------------------------------------+
-//| Multi-Symbol Custom Functions                                    |
-//+------------------------------------------------------------------+
-//Initiate MultiSymbol Function
-void InitMultiSymbol() 
-{
-   //Set up symbol arrays
-   //If current symbol, select symbol from EA settings
-   if(AllTradableSymbols == "Current")
-   {
-      NumberOfTradeableSymbols = 1;
-      ArrayResize(SymbolArray,NumberOfTradeableSymbols);
-      SymbolArray[0] = Symbol();
-      Print("EA will process ", NumberOfTradeableSymbols, " Symbol: ", SymbolArray[0]);
-   } 
-   //Else test all symbols
-   else
-   {
-      NumberOfTradeableSymbols = StringSplit(AllTradableSymbols, '|', SymbolArray);
-      ArrayResize(SymbolArray,NumberOfTradeableSymbols);
-      Print("EA will process ", NumberOfTradeableSymbols, " Symbols: ", AllTradableSymbols);
-   }
-}
-
-//Resize core arrays for multi-symbol EA
-void ResizeCoreArrays()
-{
-   //Resize core arrays for Multi-Symbol EA
-   ArrayResize(SymbolMetrics,         NumberOfTradeableSymbols);
-   ArrayResize(TicksProcessed,        NumberOfTradeableSymbols); 
-   ArrayResize(TimeLastTickProcessed, NumberOfTradeableSymbols);
-   ArrayResize(TicketNumber,          NumberOfTradeableSymbols);
-}
-//+------------------------------------------------------------------+
-//| Indicator library custom functions                               |
-//+------------------------------------------------------------------+
-//Resize indicator arrays for Multi-Symbol EA
-void ResizeIndicatorArrays()
-{
-   ArrayResize(IndicatorHandleE1, NumberOfTradeableSymbols);
-   ArrayResize(IndicatorHandleF1, NumberOfTradeableSymbols);
-   ArrayResize(IndicatorHandleF2, NumberOfTradeableSymbols);
-   ArrayResize(IndicatorHandleF3, NumberOfTradeableSymbols);
-   ArrayResize(IndicatorHandleX1, NumberOfTradeableSymbols);
-   ArrayResize(HandleAtr,         NumberOfTradeableSymbols);
-}
-
-
-//Release indicator handles from Metatrader cache for multi-symbol EA
-void ReleaseIndicatorHandles()
-{
-   for(int SymbolLoop=0; SymbolLoop < NumberOfTradeableSymbols; SymbolLoop++)
-   {
-      IndicatorRelease(IndicatorHandleE1[SymbolLoop]);
-      IndicatorRelease(IndicatorHandleF1[SymbolLoop]);
-      IndicatorRelease(IndicatorHandleF2[SymbolLoop]);
-      IndicatorRelease(IndicatorHandleF3[SymbolLoop]);
-      IndicatorRelease(IndicatorHandleX1[SymbolLoop]);
-      IndicatorRelease(HandleAtr[SymbolLoop]);
-   }
-   Print("Handle released for all symbols");   
-}
-
-//Set up Indicator1 Handle for Multi-Symbol EA
-bool InitIndicatorHanldes()
-{
-   for(int SymbolLoop=0; SymbolLoop < NumberOfTradeableSymbols; SymbolLoop++)
-   {
-      IndicatorHandleE1[SymbolLoop] = GetIndicatorHandle(IndicatorE1, SymbolArray[SymbolLoop],Period());
-      IndicatorHandleF1[SymbolLoop] = GetIndicatorHandle(IndicatorF1, SymbolArray[SymbolLoop],Period());
-      IndicatorHandleF2[SymbolLoop] = GetIndicatorHandle(IndicatorF2, SymbolArray[SymbolLoop],Period());
-      IndicatorHandleF3[SymbolLoop] = GetIndicatorHandle(IndicatorF3, SymbolArray[SymbolLoop],Period());
-      IndicatorHandleX1[SymbolLoop] = GetIndicatorHandle(IndicatorX1, SymbolArray[SymbolLoop],Period());
-      
-      // ATR handle per symbol
-      HandleAtr[SymbolLoop] = iATR(SymbolArray[SymbolLoop], Period(), AtrPeriod);
-      if(HandleAtr[SymbolLoop] == INVALID_HANDLE)
-      {
-         Print("Failed to create ATR handle for ", SymbolArray[SymbolLoop], " err=", GetLastError());
-         return false;
-      }
-   }
-   return true;     
-}
-
-//+------------------------------------------------------------------+
-//| Process trades custom functions                                  |
-//+------------------------------------------------------------------+
-//Initiate cTrade and magic number
-void InitiateTrade(int ID)
-{   
-   Trade = new CTrade();
-   Trade.SetExpertMagicNumber(ID);
-   return;  
-}
-
-double CalcRiskLots(string symbol, ENUM_ORDER_TYPE type, double entry, double sl)
-{
-   double equityForRisk = RiskCompounding ? AccountInfoDouble(ACCOUNT_EQUITY) : StartingEquity;
-   double riskMoney     = equityForRisk * RiskPercent;
-
-   // Calculate loss for 1 lot if SL is hit
    double profit = 0.0;
    if(!OrderCalcProfit(type, symbol, 1.0, entry, sl, profit))
    {
@@ -415,99 +220,652 @@ double CalcRiskLots(string symbol, ENUM_ORDER_TYPE type, double entry, double sl
       return 0.0;
 
    double lots = riskMoney / riskPerLot;
-
-   // Normalize lots to broker rules
-   double volMin  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
-   double volMax  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
-   double volStep = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
-
-   lots = MathFloor(lots / volStep) * volStep;
-
-   if(lots < volMin) lots = volMin;
-   if(lots > volMax) lots = volMax;
-
+   lots = NormalizeLots(symbol, lots);
    return lots;
 }
 
-
-//Process trades function - Fixed Lot Position Size, No SL/TP
-ulong ProcessTradeOpen(string CurrentSymbol, ENUM_ORDER_TYPE OrderType, int ID, double AtrValue) export
-
+void CloseAllPositionsForSymbolMagic(const string symbol, const int magic)
 {
-   //Set symbol string and variables 
-   int    SymbolDigits    = (int) SymbolInfoInteger(CurrentSymbol,SYMBOL_DIGITS); //note - typecast required to remove error
-   double Price           = 0.0;
-   double StopLossPrice   = 0.0;
-   double TakeProfitPrice = 0.0;
-   
-   //Open buy or sell orders
-   if(OrderType == ORDER_TYPE_BUY)
+   int total = PositionsTotal();
+   for(int i=total-1; i>=0; i--)
    {
-      Price = NormalizeDouble(SymbolInfoDouble(CurrentSymbol, SYMBOL_ASK), SymbolDigits);
-   } 
-   else if(OrderType == ORDER_TYPE_SELL)
-   {
-      Price = NormalizeDouble(SymbolInfoDouble(CurrentSymbol, SYMBOL_BID), SymbolDigits);
-   }
-   
-    if(AtrValue <= 0.0)
-   {
-      Print("ATR not ready for ", CurrentSymbol, " - skipping trade open.");
-      return 0;
-   }
-   
-   if(OrderType == ORDER_TYPE_BUY)
-   {
-      StopLossPrice   = NormalizeDouble(Price - (AtrValue * AtrLossMulti), SymbolDigits);
-      TakeProfitPrice = NormalizeDouble(Price + (AtrValue * AtrProfitMulti), SymbolDigits);
-   }
-   else if(OrderType == ORDER_TYPE_SELL)
-   {
-      StopLossPrice   = NormalizeDouble(Price + (AtrValue * AtrLossMulti), SymbolDigits);
-      TakeProfitPrice = NormalizeDouble(Price - (AtrValue * AtrProfitMulti), SymbolDigits);
-   }
-   
-   // --- NNFX risk-based lot sizing (uses ATR stop distance) ---
-   double Lots = CalcRiskLots(CurrentSymbol, OrderType, Price, StopLossPrice);
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket)) continue;
 
-   if(Lots <= 0.0)
-   {
-      Print("Lot calc failed for ", CurrentSymbol, " - skipping trade.");
-      return 0;
-   }
-  
+      if(PositionGetString(POSITION_SYMBOL) != symbol) continue;
+      if((int)PositionGetInteger(POSITION_MAGIC) != magic) continue;
 
-        
-   //Close any current positions and open new position
-   Trade.PositionClose(CurrentSymbol);
-   Trade.SetExpertMagicNumber(ID);  
-   Trade.PositionOpen(CurrentSymbol,OrderType,Lots,Price,StopLossPrice,TakeProfitPrice,__FILE__);
-   
-   
-   //Get Position Ticket Number - run through open positions and store ticket number whcih matches with current symbol
-   //Note - history deals total does not work for multisymbol
-   ulong  Ticket = 0;
-   int Total = PositionsTotal();
-   for (int i=Total -1; i>=0; i--)
-      {
-         ulong GetTicket  = PositionGetTicket(i);
-         string GetSymbol = PositionGetSymbol(i);
-         if (CurrentSymbol == GetSymbol)
-            Ticket = GetTicket;
-      }
-   
-   //Print successful
-   Print("Trade Processed For Ticket ", Ticket, " Symbol ", CurrentSymbol," OrderType ",OrderType, " Lot Size ", Lots);
-   
-   return(Ticket);
+      Trade.PositionClose(ticket);
+   }
 }
 
-//Process trades close
-void   ProcessTradeClose(string CurrentSymbol, ulong Ticket) export
+ulong FindPositionTicketByComment(const string symbol, const int magic, const string commentTag)
 {
-   Trade.PositionClose(Ticket);
-   
-   //Print successful
-   Print("Trade Closed For Ticket ", Ticket, " Symbol ", CurrentSymbol);
+   int total = PositionsTotal();
+   for(int i=total-1; i>=0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket)) continue;
+
+      if(PositionGetString(POSITION_SYMBOL) != symbol) continue;
+      if((int)PositionGetInteger(POSITION_MAGIC) != magic) continue;
+
+      string c = PositionGetString(POSITION_COMMENT);
+      if(StringFind(c, commentTag) >= 0)
+         return ticket;
+   }
+   return 0;
+}
+
+bool ModifyPositionByTicket(ulong ticket, double newSL, double newTP)
+{
+   if(ticket == 0) return false;
+   if(!PositionSelectByTicket(ticket)) return false;
+
+   string symbol = PositionGetString(POSITION_SYMBOL);
+
+   MqlTradeRequest req;
+   MqlTradeResult  res;
+   ZeroMemory(req);
+   ZeroMemory(res);
+
+   req.action   = TRADE_ACTION_SLTP;
+   req.position = ticket;
+   req.symbol   = symbol;
+   req.magic    = (ulong)MagicNumber;
+   req.sl       = newSL;
+   req.tp       = newTP;
+
+   if(!OrderSend(req, res))
+   {
+      Print("ModifyPositionByTicket OrderSend failed. ticket=", ticket, " err=", GetLastError());
+      return false;
+   }
+   if(res.retcode != TRADE_RETCODE_DONE && res.retcode != TRADE_RETCODE_DONE_PARTIAL)
+   {
+      Print("ModifyPositionByTicket failed. ticket=", ticket, " retcode=", res.retcode);
+      return false;
+   }
+   return true;
+}
+
+bool PartialCloseByTicket(const ulong ticket, const double volToClose)
+{
+   if(ticket == 0 || volToClose <= 0.0) return false;
+   if(!PositionSelectByTicket(ticket)) return false;
+
+   string symbol = PositionGetString(POSITION_SYMBOL);
+
+   double vol = PositionGetDouble(POSITION_VOLUME);
+   if(volToClose > vol) return false;
+
+   long typePos = PositionGetInteger(POSITION_TYPE);
+   double price = (typePos == POSITION_TYPE_BUY) ? SymbolInfoDouble(symbol, SYMBOL_BID) : SymbolInfoDouble(symbol, SYMBOL_ASK);
+
+   MqlTradeRequest req;
+   MqlTradeResult  res;
+   ZeroMemory(req);
+   ZeroMemory(res);
+
+   req.action   = TRADE_ACTION_DEAL;
+   req.symbol   = symbol;
+   req.position = ticket;
+   req.magic    = (ulong)MagicNumber;
+   req.volume   = volToClose;
+   req.price    = price;
+   req.type     = (typePos == POSITION_TYPE_BUY) ? ORDER_TYPE_SELL : ORDER_TYPE_BUY;
+   req.deviation= 50;
+
+   if(!OrderSend(req, res))
+   {
+      Print("PartialCloseByTicket OrderSend failed. ticket=", ticket, " err=", GetLastError());
+      return false;
+   }
+   if(res.retcode != TRADE_RETCODE_DONE && res.retcode != TRADE_RETCODE_DONE_PARTIAL)
+   {
+      Print("PartialCloseByTicket failed. ticket=", ticket, " retcode=", res.retcode);
+      return false;
+   }
+   return true;
+}
+
+int GetPositionDirectionForSymbol(const string symbol)
+{
+   int total = PositionsTotal();
+   for(int i=total-1; i>=0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket)) continue;
+
+      if(PositionGetString(POSITION_SYMBOL) != symbol) continue;
+      if((int)PositionGetInteger(POSITION_MAGIC) != MagicNumber) continue;
+
+      long type = PositionGetInteger(POSITION_TYPE);
+      if(type == POSITION_TYPE_BUY)  return 1;
+      if(type == POSITION_TYPE_SELL) return -1;
+   }
+   return 0;
+}
+
+ulong GetAnyTicketForSymbolMagic(const string symbol, const int magic)
+{
+   int total = PositionsTotal();
+   for(int i=total-1; i>=0; i--)
+   {
+      ulong ticket = PositionGetTicket(i);
+      if(!PositionSelectByTicket(ticket)) continue;
+
+      if(PositionGetString(POSITION_SYMBOL) != symbol) continue;
+      if((int)PositionGetInteger(POSITION_MAGIC) != magic) continue;
+
+      return ticket;
+   }
+   return 0;
+}
+
+//+------------------------------------------------------------------+
+//| Multi-symbol helpers                                             |
+//+------------------------------------------------------------------+
+void InitMultiSymbol()
+{
+   if(AllTradableSymbols == "Current")
+   {
+      NumberOfTradeableSymbols = 1;
+      ArrayResize(SymbolArray, NumberOfTradeableSymbols);
+      SymbolArray[0] = Symbol();
+      Print("EA will process ", NumberOfTradeableSymbols, " Symbol: ", SymbolArray[0]);
+   }
+   else
+   {
+      NumberOfTradeableSymbols = StringSplit(AllTradableSymbols, '|', SymbolArray);
+      ArrayResize(SymbolArray, NumberOfTradeableSymbols);
+      Print("EA will process ", NumberOfTradeableSymbols, " Symbols: ", AllTradableSymbols);
+   }
+}
+
+void ResizeCoreArrays()
+{
+   ArrayResize(SymbolMetrics,         NumberOfTradeableSymbols);
+   ArrayResize(TicksProcessed,        NumberOfTradeableSymbols);
+   ArrayResize(TimeLastTickProcessed, NumberOfTradeableSymbols);
+   ArrayResize(TicketNumber,          NumberOfTradeableSymbols);
+}
+
+void ResizeIndicatorArrays()
+{
+   ArrayResize(IndicatorHandleE1, NumberOfTradeableSymbols);
+   ArrayResize(IndicatorHandleF1, NumberOfTradeableSymbols);
+   ArrayResize(IndicatorHandleF2, NumberOfTradeableSymbols);
+   ArrayResize(IndicatorHandleF3, NumberOfTradeableSymbols);
+   ArrayResize(IndicatorHandleX1, NumberOfTradeableSymbols);
+   ArrayResize(HandleAtr,         NumberOfTradeableSymbols);
+}
+
+void ReleaseIndicatorHandles()
+{
+   for(int SymbolLoop=0; SymbolLoop < NumberOfTradeableSymbols; SymbolLoop++)
+   {
+      IndicatorRelease(IndicatorHandleE1[SymbolLoop]);
+      IndicatorRelease(IndicatorHandleF1[SymbolLoop]);
+      IndicatorRelease(IndicatorHandleF2[SymbolLoop]);
+      IndicatorRelease(IndicatorHandleF3[SymbolLoop]);
+      IndicatorRelease(IndicatorHandleX1[SymbolLoop]);
+      IndicatorRelease(HandleAtr[SymbolLoop]);
+   }
+   Print("Handle released for all symbols");
+}
+
+bool InitIndicatorHanldes()
+{
+   for(int SymbolLoop=0; SymbolLoop < NumberOfTradeableSymbols; SymbolLoop++)
+   {
+      IndicatorHandleE1[SymbolLoop] = GetIndicatorHandle(IndicatorE1, SymbolArray[SymbolLoop], Period());
+      IndicatorHandleF1[SymbolLoop] = GetIndicatorHandle(IndicatorF1, SymbolArray[SymbolLoop], Period());
+      IndicatorHandleF2[SymbolLoop] = GetIndicatorHandle(IndicatorF2, SymbolArray[SymbolLoop], Period());
+      IndicatorHandleF3[SymbolLoop] = GetIndicatorHandle(IndicatorF3, SymbolArray[SymbolLoop], Period());
+      IndicatorHandleX1[SymbolLoop] = GetIndicatorHandle(IndicatorX1, SymbolArray[SymbolLoop], Period());
+
+      HandleAtr[SymbolLoop] = iATR(SymbolArray[SymbolLoop], Period(), AtrPeriod);
+      if(HandleAtr[SymbolLoop] == INVALID_HANDLE)
+      {
+         Print("Failed to create ATR handle for ", SymbolArray[SymbolLoop], " err=", GetLastError());
+         return false;
+      }
+   }
+   return true;
+}
+
+//+------------------------------------------------------------------+
+//| Manage per new candle                                            |
+//+------------------------------------------------------------------+
+void ManageSinglePositionLogic(const int symIdx, const string symbol)
+{
+   // SIMPLE MODE: no management; just reset state when flat so entries can continue cleanly
+   if(SimpleWinRateMode)
+   {
+      if(GetPositionDirectionForSymbol(symbol) == 0)
+         State[symIdx].Reset();
+      return;
+   }
+
+   // FULL MODE:
+   if(State[symIdx].dir == 0 || State[symIdx].atr0 <= 0.0)
+      return;
+
+   // recover ticket if needed
+   if(State[symIdx].ticket == 0)
+   {
+      State[symIdx].ticket = FindPositionTicketByComment(symbol, MagicNumber, "NNFX_MAIN");
+      if(State[symIdx].ticket == 0)
+         State[symIdx].ticket = GetAnyTicketForSymbolMagic(symbol, MagicNumber);
+   }
+
+   if(State[symIdx].ticket == 0 || !PositionSelectByTicket(State[symIdx].ticket))
+   {
+      State[symIdx].Reset();
+      return;
+   }
+
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+
+   double lastClose = iClose(symbol, Period(), 1);
+   double lastHigh  = iHigh(symbol,  Period(), 1);
+   double lastLow   = iLow(symbol,   Period(), 1);
+   if(lastClose == 0.0)
+      return;
+
+   double tp1 = (State[symIdx].dir == 1)
+      ? (State[symIdx].entry + (AtrTP1_Multi * State[symIdx].atr0))
+      : (State[symIdx].entry - (AtrTP1_Multi * State[symIdx].atr0));
+
+   double trailTrig = (State[symIdx].dir == 1)
+      ? (State[symIdx].entry + (AtrTrailStart_Multi * State[symIdx].atr0))
+      : (State[symIdx].entry - (AtrTrailStart_Multi * State[symIdx].atr0));
+
+   bool tp1Hit = false;
+   if(State[symIdx].dir == 1 && lastHigh >= tp1) tp1Hit = true;
+   if(State[symIdx].dir == -1 && lastLow  <= tp1) tp1Hit = true;
+
+   // TP1 handling (once): close half (if possible), SL->BE
+   if(!State[symIdx].tp1_done && tp1Hit)
+   {
+      double vol = PositionGetDouble(POSITION_VOLUME);
+
+      double volMin  = SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+      double volStep = SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+      if(volStep <= 0.0) volStep = 0.01;
+
+      double rawHalf = vol / 2.0;
+      double half = MathFloor(rawHalf / volStep) * volStep;
+      if(half < volMin) half = volMin;
+
+      bool didPartial = false;
+
+      if((vol - half) >= volMin && half > 0.0 && half < vol)
+      {
+         didPartial = PartialCloseByTicket(State[symIdx].ticket, half);
+      }
+      else
+      {
+         Print("NNFX TP1 HIT but partial close not possible (min/step). symbol=", symbol,
+               " | vol=", DoubleToString(vol, 2),
+               " | halfCalc=", DoubleToString(half, 2),
+               " | volMin=", DoubleToString(volMin, 2),
+               " | volStep=", DoubleToString(volStep, 2),
+               " -> will set BE and keep full position.");
+      }
+
+      double be = NormalizeDouble(State[symIdx].entry, digits);
+      bool moved = ModifyPositionByTicket(State[symIdx].ticket, be, 0.0);
+
+      Print("NNFX TP1 HIT on ", symbol,
+            " | ticket=", (long)State[symIdx].ticket,
+            " | entry=", DoubleToString(State[symIdx].entry, digits),
+            " | atr0=", DoubleToString(State[symIdx].atr0, 6),
+            " | tp1Level=", DoubleToString(tp1, digits),
+            " | volBefore=", DoubleToString(vol, 2),
+            " | half=", DoubleToString(half, 2),
+            " | halfClosed=", (didPartial ? "YES" : "NO"),
+            " | BE_set=", (moved ? "YES" : "NO"));
+
+      State[symIdx].tp1_done = true;
+      State[symIdx].be_set   = moved;
+
+      if(PositionSelectByTicket(State[symIdx].ticket))
+         State[symIdx].last_sl = PositionGetDouble(POSITION_SL);
+   }
+
+   // Trailing activation: CLOSE beyond 2.0x ATR0 (after TP1 + BE)
+   if(State[symIdx].tp1_done && State[symIdx].be_set && !State[symIdx].trail_active)
+   {
+      bool trigger = false;
+      if(State[symIdx].dir == 1 && lastClose >= trailTrig) trigger = true;
+      if(State[symIdx].dir == -1 && lastClose <= trailTrig) trigger = true;
+
+      if(trigger)
+      {
+         State[symIdx].trail_active = true;
+
+         if(PositionSelectByTicket(State[symIdx].ticket))
+            State[symIdx].last_sl = PositionGetDouble(POSITION_SL);
+
+         Print("NNFX TRAIL ACTIVATED on ", symbol,
+               " | ticket=", (long)State[symIdx].ticket,
+               " | lastClose=", DoubleToString(lastClose, digits),
+               " | triggerLevel=", DoubleToString(trailTrig, digits),
+               " | lastSL=", DoubleToString(State[symIdx].last_sl, digits));
+      }
+   }
+
+   // Trailing update on candle close: distance = 1.5x ATR0 from CLOSE (never worse than BE)
+   if(State[symIdx].trail_active)
+   {
+      if(!PositionSelectByTicket(State[symIdx].ticket))
+      {
+         State[symIdx].Reset();
+         return;
+      }
+
+      double curTP = PositionGetDouble(POSITION_TP); // should be 0
+      double curSL = PositionGetDouble(POSITION_SL);
+
+      double desiredSL = curSL;
+
+      if(State[symIdx].dir == 1)
+      {
+         double candidate = lastClose - (AtrTrailDist_Multi * State[symIdx].atr0);
+         candidate = MathMax(candidate, State[symIdx].entry);
+         desiredSL = MathMax(curSL, candidate);
+      }
+      else if(State[symIdx].dir == -1)
+      {
+         double candidate = lastClose + (AtrTrailDist_Multi * State[symIdx].atr0);
+         candidate = MathMin(candidate, State[symIdx].entry);
+         desiredSL = (curSL == 0.0 ? candidate : MathMin(curSL, candidate));
+      }
+
+      desiredSL = NormalizeDouble(desiredSL, digits);
+
+      bool improve = false;
+      double pt = SymbolInfoDouble(symbol, SYMBOL_POINT);
+      if(State[symIdx].dir == 1 && desiredSL > curSL + (pt * 0.5)) improve = true;
+      if(State[symIdx].dir == -1 && desiredSL < curSL - (pt * 0.5)) improve = true;
+
+      if(improve)
+      {
+         if(ModifyPositionByTicket(State[symIdx].ticket, desiredSL, curTP))
+         {
+            State[symIdx].last_sl = desiredSL;
+            Print("NNFX TRAIL UPDATE on ", symbol,
+                  " | ticket=", (long)State[symIdx].ticket,
+                  " | newSL=", DoubleToString(desiredSL, digits),
+                  " | lastClose=", DoubleToString(lastClose, digits));
+         }
+      }
+   }
+
+   if(GetPositionDirectionForSymbol(symbol) == 0)
+      State[symIdx].Reset();
+}
+
+//+------------------------------------------------------------------+
+//| Trade Open: SINGLE position per signal                           |
+//| SIMPLE mode: broker TP1+SL full close                            |
+//| FULL mode  : NO broker TP (TP1 emulated)                         |
+//+------------------------------------------------------------------+
+void ProcessTradeOpen_Single(const int symIdx, const string symbol, ENUM_ORDER_TYPE type, const int magic, const double atrConfirmed)
+{
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+
+   if(atrConfirmed <= 0.0)
+   {
+      Print("ATR not ready for ", symbol, " - skipping open.");
+      return;
+   }
+
+   CloseAllPositionsForSymbolMagic(symbol, magic);
+   State[symIdx].Reset();
+
+   double reqEntry = (type == ORDER_TYPE_BUY)
+      ? NormalizeDouble(SymbolInfoDouble(symbol, SYMBOL_ASK), digits)
+      : NormalizeDouble(SymbolInfoDouble(symbol, SYMBOL_BID), digits);
+
+   double atr0 = atrConfirmed;
+
+   double sl = (type == ORDER_TYPE_BUY)
+      ? NormalizeDouble(reqEntry - (AtrSL_Multi * atr0), digits)
+      : NormalizeDouble(reqEntry + (AtrSL_Multi * atr0), digits);
+
+   double tp1 = (type == ORDER_TYPE_BUY)
+      ? NormalizeDouble(reqEntry + (AtrTP1_Multi * atr0), digits)
+      : NormalizeDouble(reqEntry - (AtrTP1_Multi * atr0), digits);
+
+   // SIMPLE uses broker TP; FULL uses no broker TP
+   double tp = (SimpleWinRateMode ? tp1 : 0.0);
+
+   double riskMoneyTotal = EquityForRisk() * RiskPercent;
+
+   double lots = CalcLotsForRiskMoney(symbol, type, reqEntry, sl, riskMoneyTotal);
+   if(lots <= 0.0)
+   {
+      Print("Lot calc failed for ", symbol, " - skipping.");
+      return;
+   }
+
+   Trade.SetExpertMagicNumber(magic);
+
+   bool ok = Trade.PositionOpen(symbol, type, lots, reqEntry, sl, tp, "NNFX_MAIN");
+   if(!ok)
+   {
+      Print("Failed to open position on ", symbol, " err=", GetLastError());
+      return;
+   }
+
+   ulong ticket = FindPositionTicketByComment(symbol, magic, "NNFX_MAIN");
+   if(ticket == 0)
+      ticket = GetAnyTicketForSymbolMagic(symbol, magic);
+
+   if(ticket == 0 || !PositionSelectByTicket(ticket))
+   {
+      Print("Opened but could not select position for state on ", symbol);
+      return;
+   }
+
+   double filledEntry = PositionGetDouble(POSITION_PRICE_OPEN);
+
+   State[symIdx].ticket = ticket;
+   State[symIdx].dir    = (type == ORDER_TYPE_BUY ? 1 : -1);
+   State[symIdx].atr0   = atr0;
+   State[symIdx].entry  = filledEntry;
+   State[symIdx].tp1_done = false;
+   State[symIdx].be_set   = false;
+   State[symIdx].trail_active = false;
+   State[symIdx].last_sl = PositionGetDouble(POSITION_SL);
+
+   TicketNumber[symIdx] = ticket;
+
+   double tp1LevelEmu = (State[symIdx].dir == 1)
+      ? NormalizeDouble(filledEntry + (AtrTP1_Multi * atr0), digits)
+      : NormalizeDouble(filledEntry - (AtrTP1_Multi * atr0), digits);
+
+   if(SimpleWinRateMode)
+   {
+      Print("Opened SIMPLE (TP1+SL broker) on ", symbol,
+            " | lots=", DoubleToString(lots, 2),
+            " | filledEntry=", DoubleToString(filledEntry, digits),
+            " | ATR0=", DoubleToString(atr0, 6),
+            " | SL=", DoubleToString(State[symIdx].last_sl, digits),
+            " | TP1(broker)=", DoubleToString(tp, digits),
+            " | ticket=", (long)ticket);
+   }
+   else
+   {
+      Print("Opened FULL (NO TP) on ", symbol,
+            " | lots=", DoubleToString(lots, 2),
+            " | filledEntry=", DoubleToString(filledEntry, digits),
+            " | ATR0=", DoubleToString(atr0, 6),
+            " | SL=", DoubleToString(State[symIdx].last_sl, digits),
+            " | TP1Level(emulated)=", DoubleToString(tp1LevelEmu, digits),
+            " | ticket=", (long)ticket);
+   }
+}
+
+//+------------------------------------------------------------------+
+//| Expert initialization function                                   |
+//+------------------------------------------------------------------+
+int OnInit()
+{
+   Trade = new CTrade();
+   Trade.SetExpertMagicNumber(MagicNumber);
+
+   StartingEquity = AccountInfoDouble(ACCOUNT_EQUITY);
+
+   InitMultiSymbol();
+   ResizeCoreArrays();
+   ResizeIndicatorArrays();
+
+   ArrayResize(State, NumberOfTradeableSymbols);
+   for(int i=0; i<NumberOfTradeableSymbols; i++)
+      State[i].Reset();
+
+   if(!InitIndicatorHanldes())
+      return(INIT_FAILED);
+
+   return(INIT_SUCCEEDED);
+}
+
+//+------------------------------------------------------------------+
+//| Expert deinitialization function                                 |
+//+------------------------------------------------------------------+
+void OnDeinit(const int reason)
+{
+   ReleaseIndicatorHandles();
+}
+
+//+------------------------------------------------------------------+
+//| Expert tick function                                             |
+//+------------------------------------------------------------------+
+void OnTick()
+{
+   ExpertComments = "";
+   TicksReceived++;
+
+   for(int SymbolLoop=0; SymbolLoop < NumberOfTradeableSymbols; SymbolLoop++)
+   {
+      string CurrentSymbol = SymbolArray[SymbolLoop];
+
+      datetime curBarTime = iTime(CurrentSymbol, Period(), 0);
+      if(TimeLastTickProcessed[SymbolLoop] != curBarTime)
+      {
+         TicksProcessed[SymbolLoop]++;
+         TimeLastTickProcessed[SymbolLoop] = curBarTime;
+
+         // Manage existing trades first (important)
+         ManageSinglePositionLogic(SymbolLoop, CurrentSymbol);
+
+         double atrConfirmed = GetAtrConfirmed(HandleAtr[SymbolLoop]);
+
+         // Determine position direction from actual positions
+         int dirNow = GetPositionDirectionForSymbol(CurrentSymbol);
+         string PositionDirection = (dirNow == 1 ? "Long" : (dirNow == -1 ? "Short" : "NA"));
+
+         // Signals
+         IndicatorSignalE1 = GetIndicatorTrigger(IndicatorE1, IndicatorHandleE1[SymbolLoop], CurrentSymbol, Period());
+         IndicatorSignalF1 = GetIndicatorFilter(IndicatorF1,  IndicatorHandleF1[SymbolLoop], CurrentSymbol, Period());
+         IndicatorSignalF2 = GetIndicatorFilter(IndicatorF2,  IndicatorHandleF2[SymbolLoop], CurrentSymbol, Period());
+         IndicatorSignalF3 = GetIndicatorFilter(IndicatorF3,  IndicatorHandleF3[SymbolLoop], CurrentSymbol, Period());
+         IndicatorSignalX1 = GetIndicatorTrigger(IndicatorX1, IndicatorHandleX1[SymbolLoop], CurrentSymbol, Period());
+
+         // Entry (ONLY if flat)
+         if(PositionDirection == "NA")
+         {
+            if(
+               (IndicatorSignalE1 == "Long") &&
+               (IndicatorSignalF1 == "Long"  || IndicatorSignalF1 == "NA") &&
+               (IndicatorSignalF2 == "Long"  || IndicatorSignalF2 == "NA") &&
+               (IndicatorSignalF3 == "Long"  || IndicatorSignalF3 == "NA")
+            )
+            {
+               ProcessTradeOpen_Single(SymbolLoop, CurrentSymbol, ORDER_TYPE_BUY, MagicNumber, atrConfirmed);
+               PositionDirection = "Long";
+            }
+            else if(
+               (IndicatorSignalE1 == "Short") &&
+               (IndicatorSignalF1 == "Short" || IndicatorSignalF1 == "NA") &&
+               (IndicatorSignalF2 == "Short" || IndicatorSignalF2 == "NA") &&
+               (IndicatorSignalF3 == "Short" || IndicatorSignalF3 == "NA")
+            )
+            {
+               ProcessTradeOpen_Single(SymbolLoop, CurrentSymbol, ORDER_TYPE_SELL, MagicNumber, atrConfirmed);
+               PositionDirection = "Short";
+            }
+         }
+         else
+         {
+            // Exit signal closes everything (both modes)
+            if(
+               (PositionDirection == "Long"  && IndicatorSignalX1 == "Short") ||
+               (PositionDirection == "Short" && IndicatorSignalX1 == "Long")
+            )
+            {
+               CloseAllPositionsForSymbolMagic(CurrentSymbol, MagicNumber);
+               State[SymbolLoop].Reset();
+               PositionDirection = "NA";
+            }
+         }
+
+         // Update metrics
+         SymbolMetrics[SymbolLoop] =
+            CurrentSymbol +
+            " | Mode: " + (SimpleWinRateMode ? "SIMPLE" : "FULL") +
+            " | Ticks: " + IntegerToString((int)TicksProcessed[SymbolLoop]) +
+            " | Last Candle: " + TimeToString(TimeLastTickProcessed[SymbolLoop]) +
+            " | Dir: " + PositionDirection +
+            " | Ticket: " + IntegerToString((int)State[SymbolLoop].ticket) +
+            " | ATR0: " + DoubleToString(State[SymbolLoop].atr0, 6) +
+            " | TP1Done: " + (State[SymbolLoop].tp1_done ? "Y" : "N") +
+            " | BE: " + (State[SymbolLoop].be_set ? "Y" : "N") +
+            " | Trail: " + (State[SymbolLoop].trail_active ? "Y" : "N") +
+            " | E1: " + IndicatorSignalE1 +
+            " | F1: " + IndicatorSignalF1 +
+            " | F2: " + IndicatorSignalF2 +
+            " | X1: " + IndicatorSignalX1;
+      }
+
+      ExpertComments += SymbolMetrics[SymbolLoop] + "\n\r";
+   }
+
+   Comment("\n\rExpert: ", MagicNumber, "\n\r",
+           "MT5 Server Time: ", TimeCurrent(), "\n\r",
+           "Ticks Received: ", TicksReceived, "\n\r\n\r",
+           "Symbols Traded:\n\r",
+           ExpertComments);
+}
+
+//+------------------------------------------------------------------+
+//| Custom Optimization Criterion (OnTester)                          |
+//| Use Optimization Criterion: "Custom max"                          |
+//+------------------------------------------------------------------+
+double OnTester()
+{
+   int trades = (int)TesterStatistics(STAT_TRADES);
+
+   if(trades < MinTradesForWinRate)
+   {
+      PrintFormat("OnTester: %d trades (< %d) - Not enough data for winrate calculation.", trades, MinTradesForWinRate);
+      return 0.0; // force optimizer to avoid low-sample runs
+   }
+
+   int wins = (int)TesterStatistics(STAT_PROFIT_TRADES);
+
+   double winrate = 0.0;
+   if(trades > 0)
+      winrate = ((double)wins / (double)trades) * 100.0;
+
+   PrintFormat("OnTester: trades=%d | wins=%d | winrate=%.2f%%", trades, wins, winrate);
+   return winrate; // optimizer "Custom max" will maximize win rate
 }
 //+------------------------------------------------------------------+
+
+
+
