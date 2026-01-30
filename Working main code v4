@@ -94,7 +94,7 @@ input int    MinTradesForWinRate = 20; // If fewer than this, OnTester() returns
 //+------------------------------------------------------------------+
 enum INDICATORSE1
 {
-   E1_NA,Pfe_A_6_1_3, Pfe_A_7_1_3, Pfe_A_6_1_5, Pfe_A_7_1_5, Pfe_A_8_1_5, Pfe_B_3_1_3, Pfe_B_4_1_3, Pfe_B_5_1_3, Pfe_A_19_1_5
+   E1_NA, Smi_A_13_25_2_5_0
 };
 input INDICATORSE1 InputEnumE1;
 
@@ -866,6 +866,3 @@ double OnTester()
    return winrate; // optimizer "Custom max" will maximize win rate
 }
 //+------------------------------------------------------------------+
-
-
-
