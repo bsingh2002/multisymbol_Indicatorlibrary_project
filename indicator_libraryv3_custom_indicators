@@ -14,8 +14,6 @@
 //|                                                    Patch Notes 3 |
 //| Added further indicators to this library. See library contents.  |
 //|                                                                  |
-//|                                                                  |
-//|                                                                  |
 //+------------------------------------------------------------------+
 //|                                                            NOTES |
 //| STRUCTURE                                                        |
@@ -50,8 +48,12 @@
 //|   EmaX_A_Fast_Slow - Trigger, Filter - [A,B]                     |
 //|   SmmaX_A_Fast_Slow - Trigger, Filter - [A,B]                    |
 //|   LwmaX_A_Fast_Slow - Trigger, Filter - [A,B]                    |
+//|   Coppock_A_Roc1_Roc2_MaPeriod - Trigger, Filter - [A]           |
+//|   HalfTrend_A_Amplitude - Trigger - [A,B] (color flip + arrows)  |
 //|---MOMENTUM INDICATORS                                            |
 //|   Rsi_A_Period_UpperThreshold_LowerThreshold - Filter - [A,B]    |
+//|   Cci_A_Period - Trigger, Filter - [A,B] (0-line cross)          |
+//|   Rsi50_A_Period - Trigger, Filter - [A] (50-line cross)         |
 //|---VOLATILITY INDICATORS                                          |
 //|   Bb_A_Period_SD_NoCloses - Trigger - [A,B]                      |
 //|   Atr_A_Period - NA - [A]                                        |
@@ -60,7 +62,16 @@
 //|   Macd_A_Fast_Slow_Signal - Trigger, Filter - [A,B]              |
 //|   Ac_A - Trigger, Filter - [A,B]                                 |
 //|   Doda_A_Slw_Pds_Signal - Trigger, Filter - [A,B]                |
-//|   Pfe_A_Period_UseAverage_MaPeriod - Trigger, Filter - [A,B]     | 
+//|   Pfe_A_Period_UseAverage_MaPeriod - Trigger, Filter - [A,B]     |
+//|   Ao_A - Trigger, Filter - [A,B] (AO color flip)                 |
+//|   Dpo_A_Period - Trigger, Filter - [A] (0-line cross)            |
+//|   Fishertransform_A_Period_CalcMode_Price - Trigger - [A,B]      |
+//|   FisherTransform_A_Length_Shift - Trigger - [A,B] (line cross)  |
+//|   QqeCross_A_SF                                                  |
+//|   Roc_A_Period - Trigger, Filter - [A] (0-line cross)            |
+//|   Stc_A_Schaff_FastEma_SlowEma_Smooth_Price - Trigger - [A]      |
+//|   StochRsiK50_A_KPeriod_DPeriod_RsiPeriod_StochPeriod_Price
+//|   Smi_A_Length_Smooth1_Smooth2_Signal_Price
 //|---PRICE ACTION INDICATORS                                        |
 //|   Don_A_Period - Trigger - [A]                                   |
 //|---OTHER INDICATORS                                               |
@@ -75,178 +86,262 @@
 //+------------------------------------------------------------------+
 int GetIndicatorHandle(string Indicator, string CurrentSymbol, ENUM_TIMEFRAMES CurrentPeriod) export
 {
-//---SET UP
    int    Handle = 0;
    string IndicatorArray[];
    int    NumberOfParameters;
    string IndicatorDetails = "";
 
    NumberOfParameters = StringSplit(Indicator, '_', IndicatorArray);
-   ArrayResize(IndicatorArray,NumberOfParameters);
+   ArrayResize(IndicatorArray, NumberOfParameters);
 
    for(int n=0; n < NumberOfParameters; n++)
       IndicatorDetails = IndicatorDetails + IntegerToString(n) + ") " + IndicatorArray[n] + " ";
 
    Print("EA will process indicator: ", IndicatorDetails, " with ", NumberOfParameters, " parameters for symbol ", CurrentSymbol);
 
-//---CHECK FOR NA INDICATOR
+   //---CHECK FOR NA INDICATOR
    if(IndicatorArray[0] == "Na")
    {
-      Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+      Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return 0;
    }
 
-//---TREND FOLLOWING INDICATORS
+   //---TREND FOLLOWING INDICATORS
    if(IndicatorArray[0] == "Sma")
    {
-      Handle = iMA(CurrentSymbol,CurrentPeriod,StringToInteger(IndicatorArray[2]),0,MODE_SMA,PRICE_CLOSE);
+      Handle = iMA(CurrentSymbol, CurrentPeriod, StringToInteger(IndicatorArray[2]), 0, MODE_SMA, PRICE_CLOSE);
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
    if(IndicatorArray[0] == "Ema")
    {
-      Handle = iMA(CurrentSymbol,CurrentPeriod,StringToInteger(IndicatorArray[2]),0,MODE_EMA,PRICE_CLOSE);
+      Handle = iMA(CurrentSymbol, CurrentPeriod, StringToInteger(IndicatorArray[2]), 0, MODE_EMA, PRICE_CLOSE);
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
    if(IndicatorArray[0] == "Smma")
    {
-      Handle = iMA(CurrentSymbol,CurrentPeriod,StringToInteger(IndicatorArray[2]),0,MODE_SMMA,PRICE_CLOSE);
+      Handle = iMA(CurrentSymbol, CurrentPeriod, StringToInteger(IndicatorArray[2]), 0, MODE_SMMA, PRICE_CLOSE);
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
    if(IndicatorArray[0] == "Lwma")
    {
-      Handle = iMA(CurrentSymbol,CurrentPeriod,StringToInteger(IndicatorArray[2]),0,MODE_LWMA,PRICE_CLOSE);
+      Handle = iMA(CurrentSymbol, CurrentPeriod, StringToInteger(IndicatorArray[2]), 0, MODE_LWMA, PRICE_CLOSE);
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
    if(IndicatorArray[0] == "Frama")
    {
-      Handle = iFrAMA(CurrentSymbol,CurrentPeriod,StringToInteger(IndicatorArray[2]),0,PRICE_CLOSE);
+      Handle = iFrAMA(CurrentSymbol, CurrentPeriod, StringToInteger(IndicatorArray[2]), 0, PRICE_CLOSE);
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
    if(IndicatorArray[0] == "SmaX")
    {
-      Handle = iCustom(CurrentSymbol,CurrentPeriod,"Custom\\MovingAverageCross",MODE_SMA,StringToInteger(IndicatorArray[2]),StringToInteger(IndicatorArray[3]),PRICE_CLOSE);
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\MovingAverageCross",
+                       MODE_SMA, StringToInteger(IndicatorArray[2]), StringToInteger(IndicatorArray[3]), PRICE_CLOSE);
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
    if(IndicatorArray[0] == "EmaX")
    {
-      Handle = iCustom(CurrentSymbol,CurrentPeriod,"Custom\\MovingAverageCross",MODE_EMA,StringToInteger(IndicatorArray[2]),StringToInteger(IndicatorArray[3]),PRICE_CLOSE);
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\MovingAverageCross",
+                       MODE_EMA, StringToInteger(IndicatorArray[2]), StringToInteger(IndicatorArray[3]), PRICE_CLOSE);
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
    if(IndicatorArray[0] == "SmmaX")
    {
-      Handle = iCustom(CurrentSymbol,CurrentPeriod,"Custom\\MovingAverageCross",MODE_SMMA,StringToInteger(IndicatorArray[2]),StringToInteger(IndicatorArray[3]),PRICE_CLOSE);
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\MovingAverageCross",
+                       MODE_SMMA, StringToInteger(IndicatorArray[2]), StringToInteger(IndicatorArray[3]), PRICE_CLOSE);
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
    if(IndicatorArray[0] == "LwmaX")
    {
-      Handle = iCustom(CurrentSymbol,CurrentPeriod,"Custom\\MovingAverageCross",MODE_LWMA,StringToInteger(IndicatorArray[2]),StringToInteger(IndicatorArray[3]),PRICE_CLOSE);
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\MovingAverageCross",
+                       MODE_LWMA, StringToInteger(IndicatorArray[2]), StringToInteger(IndicatorArray[3]), PRICE_CLOSE);
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+      return Handle;
+   }
+   
+   // --- TREND FOLLOWING INDICATORS
+      if(IndicatorArray[0] == "Coppock")
+      {
+         int roc1 = StringToInteger(IndicatorArray[2]);
+         int roc2 = StringToInteger(IndicatorArray[3]);
+         int ma   = StringToInteger(IndicatorArray[4]);
+      
+         Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\Coppock", roc1, roc2, ma);
+      
+         if(Handle == INVALID_HANDLE)
+            MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol +
+                       ". Error Code " + IntegerToString(GetLastError()));
+         else
+            Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+      
+         return Handle;
+      }
+      
+   // HalfTrend New (custom indicator file in Custom folder)
+   // Format: HalfTrend_A_Amplitude  e.g. HalfTrend_A_5
+   // Signal buffers: 2=UpArrow, 3=DownArrow, 1=LineColorIndex (0=Red, 1=Blue)
+   if(IndicatorArray[0] == "HalfTrend")
+   {
+      int amp = StringToInteger(IndicatorArray[2]);
+   
+      // IMPORTANT: the file name string MUST match your compiled EX5 name exactly.
+      // If your file is named "Half Trend New BT.mq5", then use:
+      // "Custom\\Half Trend New BT"
+      // If your file is "Half Trend New.mq5", then use:
+      // "Custom\\Half Trend New"
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\HalfTrend", amp);
+   
+      if(Handle == INVALID_HANDLE)
+         Print("HANDLE FAIL: ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+   
       return Handle;
    }
 
-//---MOMENTUM INDICATORS
+
+   //---MOMENTUM INDICATORS
    if(IndicatorArray[0] == "Rsi")
    {
-      Handle = iRSI(CurrentSymbol,CurrentPeriod,StringToInteger(IndicatorArray[2]),PRICE_CLOSE);
+      Handle = iRSI(CurrentSymbol, CurrentPeriod, StringToInteger(IndicatorArray[2]), PRICE_CLOSE);
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
-//---VOLATILITY INDICATORS
+   // CCI (custom indicator file: Custom\cci.ex5)
+   // Format: Cci_A_Period  e.g. Cci_A_14
+   if(IndicatorArray[0] == "Cci")
+   {
+      int cciPeriod = StringToInteger(IndicatorArray[2]);
+
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\cci", cciPeriod);
+
+      if(Handle == INVALID_HANDLE)
+         MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol +
+                    ". Error Code " + IntegerToString(GetLastError()));
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+
+      return Handle;
+   }
+   
+   // RSI (custom indicator file: Custom\rsi.ex5)
+   // Rsi50 format: Rsi50_A_Period  e.g. Rsi50_A_14
+   // Buffer 0 = RSI value
+   if(IndicatorArray[0] == "Rsi50")
+   {
+      int period = StringToInteger(IndicatorArray[2]);
+   
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\rsi", period);
+   
+      if(Handle == INVALID_HANDLE)
+         Print("HANDLE FAIL: ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+   
+      return Handle;
+   }
+
+
+   //---VOLATILITY INDICATORS
    if(IndicatorArray[0] == "Bb")
    {
-      Handle = iBands(CurrentSymbol,CurrentPeriod,StringToInteger(IndicatorArray[2]),0,StringToInteger(IndicatorArray[3]),PRICE_CLOSE);
+      Handle = iBands(CurrentSymbol, CurrentPeriod, StringToInteger(IndicatorArray[2]), 0, StringToInteger(IndicatorArray[3]), PRICE_CLOSE);
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
    if(IndicatorArray[0] == "Atr")
    {
-      Handle = iATR(CurrentSymbol,CurrentPeriod,StringToInteger(IndicatorArray[2]));
+      Handle = iATR(CurrentSymbol, CurrentPeriod, StringToInteger(IndicatorArray[2]));
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
    if(IndicatorArray[0] == "Adma")
    {
-      Handle = iCustom(CurrentSymbol,CurrentPeriod,"Custom\\AdMa",VOLUME_TICK,StringToInteger(IndicatorArray[2]));
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\AdMa", VOLUME_TICK, StringToInteger(IndicatorArray[2]));
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
-//---OSCILLATOR INDICATORS
+   //---OSCILLATOR INDICATORS
    if(IndicatorArray[0] == "Macd")
    {
-      Handle = iMACD(CurrentSymbol,CurrentPeriod,StringToInteger(IndicatorArray[2]),StringToInteger(IndicatorArray[3]),StringToInteger(IndicatorArray[4]),PRICE_CLOSE);
+      Handle = iMACD(CurrentSymbol, CurrentPeriod,
+                     StringToInteger(IndicatorArray[2]),
+                     StringToInteger(IndicatorArray[3]),
+                     StringToInteger(IndicatorArray[4]),
+                     PRICE_CLOSE);
+
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
    if(IndicatorArray[0] == "Ac")
    {
-      Handle = iAC(CurrentSymbol,CurrentPeriod);
+      Handle = iAC(CurrentSymbol, CurrentPeriod);
       if(Handle == INVALID_HANDLE)
          MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
       return Handle;
    }
 
@@ -272,8 +367,7 @@ int GetIndicatorHandle(string Indicator, string CurrentSymbol, ENUM_TIMEFRAMES C
       bool useAverage = (StringToInteger(IndicatorArray[3]) != 0);
       int  maPeriod   = StringToInteger(IndicatorArray[4]);
 
-      Handle = iCustom(CurrentSymbol, CurrentPeriod,
-                       "Custom\\polarized-fractal-efficiency",
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\polarized-fractal-efficiency",
                        pfePeriod, useAverage, maPeriod);
 
       if(Handle == INVALID_HANDLE)
@@ -284,20 +378,225 @@ int GetIndicatorHandle(string Indicator, string CurrentSymbol, ENUM_TIMEFRAMES C
 
       return Handle;
    }
-
-//---PRICE ACTION INDICATORS
-   if(IndicatorArray[0] == "Don")
+   
+   // Ehlers Fisher Transform (custom indicator file: Custom\Ehlers Fisher transform.ex5)
+   // Format: Fishertransform_A_Period_CalcMode_Price  e.g. Fishertransform_A_32_1_4
+   // Buffers: 0 = Fisher (val), 2 = Signal
+   if(IndicatorArray[0] == "Fishertransform")
    {
-      Handle = iCustom(CurrentSymbol,CurrentPeriod,"Custom\\DonchianChannel",StringToInteger(IndicatorArray[2]));
+      int period   = StringToInteger(IndicatorArray[2]);
+      int calcMode = StringToInteger(IndicatorArray[3]); // 0=calc_hl, 1=calc_no
+      int price    = StringToInteger(IndicatorArray[4]); // ENUM_APPLIED_PRICE int
+   
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\Ehlers Fisher transform (original)",
+                 period, calcMode, price);
+   
       if(Handle == INVALID_HANDLE)
-         MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
+         Print("HANDLE FAIL: ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
       else
-         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ",Handle,".");
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+   
       return Handle;
    }
 
-//---ERROR HANDLING
-   Print("No Handle created for " + Indicator + " for " + CurrentSymbol + ". Handle ID ",Handle,".");
+
+   // AO (Awesome Oscillator) - custom to access color buffer
+   // File: MQL5\Indicators\Custom\awesome_oscillator.ex5
+   if(IndicatorArray[0] == "Ao")
+   {
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\awesome_oscillator");
+
+      if(Handle == INVALID_HANDLE)
+         MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol +
+                    ". Error Code " + IntegerToString(GetLastError()));
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+
+      return Handle;
+   }
+   
+   // DPO (custom indicator file: Custom\DPO.ex5)
+   // Format: Dpo_A_Period  e.g. Dpo_A_12
+   if(IndicatorArray[0] == "Dpo")
+   {
+      int period = StringToInteger(IndicatorArray[2]);
+   
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\DPO", period);
+   
+      if(Handle == INVALID_HANDLE)
+         Print("HANDLE FAIL: ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+   
+      return Handle;
+   }
+   
+   // FisherTransform (custom indicator file: Custom\FisherTransform.ex5)
+   // Format: FisherTransform_A_Length_Shift  e.g. FisherTransform_A_10_0
+   // Buffers: 0 = Fisher line, 1 = Trigger line
+   if(IndicatorArray[0] == "FisherTransform")
+   {
+      int length = StringToInteger(IndicatorArray[2]);
+      int shift  = StringToInteger(IndicatorArray[3]);
+   
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\FisherTransform", length, shift);
+   
+      if(Handle == INVALID_HANDLE)
+         Print("HANDLE FAIL: ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+   
+      return Handle;
+   }
+   
+   // QQE (Custom\QQE.ex5)
+   // QqeCross format: QqeCross_A_SF  e.g. QqeCross_A_5
+   // Buffers: 0 = RSI MA, 1 = Smoothed (TrLevelSlow)
+   if(IndicatorArray[0] == "QqeCross")
+   {
+      int sf = StringToInteger(IndicatorArray[2]);
+   
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\QQE",
+                       sf,     // SF
+                       false,  // AlertOnCrossover
+                       false,  // AlertOnLevel
+                       50,     // AlertLevel
+                       false,  // ArrowsOnCrossover
+                       clrGreen,
+                       clrRed,
+                       false,  // ArrowsOnLevel
+                       clrGreen,
+                       clrRed,
+                       false,  // NativeAlerts
+                       false,  // EmailAlerts
+                       false,  // NotificationAlerts
+                       PERIOD_CURRENT, // UpperTimeframe
+                       "QQE-"  // ObjectPrefix
+                      );
+   
+      if(Handle == INVALID_HANDLE)
+         Print("HANDLE FAIL: ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+   
+      return Handle;
+   }
+   
+   // ROC (custom indicator file: Custom\roc.ex5)
+   // Format: Roc_A_Period  e.g. Roc_A_12
+   // Buffer 0 = ROC value
+   if(IndicatorArray[0] == "Roc")
+   {
+      int period = StringToInteger(IndicatorArray[2]);
+   
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\roc", period);
+   
+      if(Handle == INVALID_HANDLE)
+         Print("HANDLE FAIL: ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+   
+      return Handle;
+   }
+   
+   // Schaff Trend Cycle (custom indicator file: Custom\Schaff Trend Cycle.ex5 or whatever you named it)
+   // Format: Stc_A_SchaffPeriod_FastEma_SlowEma_SmoothPeriod_Price
+   // Example: Stc_A_32_23_50_3_0
+   // Buffers: 0 = STC value, 1 = color index (0=silver, 1=green, 2=orange)
+   if(IndicatorArray[0] == "Stc")
+   {
+      int schaff = StringToInteger(IndicatorArray[2]);
+      int fast   = StringToInteger(IndicatorArray[3]);
+      int slow   = StringToInteger(IndicatorArray[4]);
+      double sm  = StringToDouble(IndicatorArray[5]);
+      int price  = StringToInteger(IndicatorArray[6]); // enPrices (pr_close=0)
+   
+      // IMPORTANT: this iCustom name MUST match your compiled file name exactly.
+      // If your file is "Schaff Trend Cycle.mq5", use "Custom\\Schaff Trend Cycle"
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\Schaff Trend Cycle",
+                       schaff, fast, slow, sm, price);
+   
+      if(Handle == INVALID_HANDLE)
+         Print("HANDLE FAIL: ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+   
+      return Handle;
+   }
+   
+   // Stoch RSI (Custom\Stoch RSI.ex5)
+   // StochRsiK50 format: StochRsiK50_A_KPeriod_DPeriod_RsiPeriod_StochPeriod_Price
+   // Example: StochRsiK50_A_3_3_14_14_0
+   // Buffers: 0 = K, 1 = D
+   if(IndicatorArray[0] == "StochRsiK50")
+   {
+      int kPeriod     = StringToInteger(IndicatorArray[2]);
+      int dPeriod     = StringToInteger(IndicatorArray[3]);
+      int rsiPeriod   = StringToInteger(IndicatorArray[4]);
+      int stochPeriod = StringToInteger(IndicatorArray[5]);
+      int price       = StringToInteger(IndicatorArray[6]); // ENUM_APPLIED_PRICE int (PRICE_CLOSE=0)
+   
+      // IMPORTANT: filename must match exactly: "Stoch RSI.mq5" -> "Custom\\Stoch RSI"
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\Stoch RSI",
+                       kPeriod, dPeriod, rsiPeriod, stochPeriod, (ENUM_APPLIED_PRICE)price);
+   
+      if(Handle == INVALID_HANDLE)
+         Print("HANDLE FAIL: ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+   
+      return Handle;
+   }
+   
+   // SMI (custom indicator file: Custom\Stochastic Momentum Index.ex5 OR whatever you named it)
+   // Format: Smi_A_Length_Smooth1_Smooth2_Signal_Price
+   // Example: Smi_A_13_25_2_5_0
+   // Buffers: 0 = SMI (val), 2 = Signal
+   if(IndicatorArray[0] == "Smi")
+   {
+      int length  = StringToInteger(IndicatorArray[2]);
+      int smooth1 = StringToInteger(IndicatorArray[3]);
+      int smooth2 = StringToInteger(IndicatorArray[4]);
+      int sig     = StringToInteger(IndicatorArray[5]);
+      int price   = StringToInteger(IndicatorArray[6]); // ENUM_APPLIED_PRICE int
+   
+      // IMPORTANT: This must match the .mq5 filename exactly (without .mq5).
+      // If your file is "Stochastic Momentum Index.mq5", use "Custom\\Stochastic Momentum Index"
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\Stochastic Momentum Index",
+                       length, smooth1, smooth2, sig, (ENUM_APPLIED_PRICE)price);
+   
+      if(Handle == INVALID_HANDLE)
+         Print("HANDLE FAIL: ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+   
+      return Handle;
+   }
+
+   
+   
+
+
+
+
+
+
+
+
+
+   //---PRICE ACTION INDICATORS
+   if(IndicatorArray[0] == "Don")
+   {
+      Handle = iCustom(CurrentSymbol, CurrentPeriod, "Custom\\DonchianChannel", StringToInteger(IndicatorArray[2]));
+      if(Handle == INVALID_HANDLE)
+         MessageBox("Failed to create handle for " + Indicator + " indicator for " + CurrentSymbol + ". Error Code " + IntegerToString(GetLastError()));
+      else
+         Print("Handle for " + Indicator + " for " + CurrentSymbol + " created. Handle ID ", Handle, ".");
+      return Handle;
+   }
+
+   //---ERROR HANDLING
+   Print("No Handle created for " + Indicator + " for " + CurrentSymbol + ". Handle ID ", Handle, ".");
    return 0;
 }
 
@@ -306,30 +605,84 @@ int GetIndicatorHandle(string Indicator, string CurrentSymbol, ENUM_TIMEFRAMES C
 //+------------------------------------------------------------------+
 string GetIndicatorTrigger(string Indicator, int IndicatorHandle, string CurrentSymbol, ENUM_TIMEFRAMES CurrentPeriod) export
 {
-//---SET UP
    string IndicatorArray[];
    int    NumberOfParameters;
-   NumberOfParameters = StringSplit(Indicator, '_', IndicatorArray);
-   ArrayResize(IndicatorArray,NumberOfParameters);
 
-//---CHECK FOR NA INDICATOR
+   NumberOfParameters = StringSplit(Indicator, '_', IndicatorArray);
+   ArrayResize(IndicatorArray, NumberOfParameters);
+
+   //---CHECK FOR NA INDICATOR
    if(IndicatorArray[0] == "Na")
       return "NA";
 
-//---TREND FOLLOWING INDICATORS
-   // Moving average triggers (FIXED: use bar 1 and bar 2 only)
-   if(IndicatorArray[0] == "Sma" || IndicatorArray[0] == "Ema" || IndicatorArray[0] == "Smma" || IndicatorArray[0] == "Lwma" ||  IndicatorArray[0] == "Frama")
+   //---MOMENTUM INDICATORS
+   // CCI trigger (0-line cross) - bar1/bar2 confirmed
+   if(IndicatorArray[0] == "Cci")
    {
-      double BufferMA[];
-      // FIX: Copy from shift 1 for 2 bars -> [bar1, bar2]
-      bool FillMA = CopyBuffer(IndicatorHandle,0,1,2,BufferMA);
-      if(!FillMA)
+      double bufCCI[];
+      ArraySetAsSeries(bufCCI, true);
+
+      int got = CopyBuffer(IndicatorHandle, 0, 1, 2, bufCCI); // [bar1, bar2]
+      if(got < 2)
          return "Fill Error";
 
-      double CurrentMA    = NormalizeDouble(BufferMA[0],10); // bar 1
-      double CurrentPrice = NormalizeDouble(iClose(CurrentSymbol,CurrentPeriod,1), 10); // bar 1 close
-      double PriorMA      = NormalizeDouble(BufferMA[1],10); // bar 2
-      double PriorPrice   = NormalizeDouble(iClose(CurrentSymbol,CurrentPeriod,2), 10); // bar 2 close
+      double cci1 = NormalizeDouble(bufCCI[0], 10); // bar1
+      double cci2 = NormalizeDouble(bufCCI[1], 10); // bar2
+
+      if(IndicatorArray[1] == "A")
+      {
+         if(cci2 <= 0.0 && cci1 > 0.0) return "Long";
+         if(cci2 >= 0.0 && cci1 < 0.0) return "Short";
+         return "No Trade";
+      }
+      else if(IndicatorArray[1] == "B")
+      {
+         if(cci2 <= 0.0 && cci1 > 0.0) return "Short";
+         if(cci2 >= 0.0 && cci1 < 0.0) return "Long";
+         return "No Trade";
+      }
+      return "Error";
+   }
+   
+   // RSI 50-line CROSS trigger (treat 50 as zero) - bar1/bar2 confirmed
+   // Long  if (rsi2 <= 50 && rsi1 > 50)
+   // Short if (rsi2 >= 50 && rsi1 < 50)
+   if(IndicatorArray[0] == "Rsi50")
+   {
+      if(IndicatorHandle == INVALID_HANDLE || IndicatorHandle <= 0)
+         return "Fill Error";
+   
+      double buf[];
+      ArraySetAsSeries(buf, true);
+   
+      int copied = CopyBuffer(IndicatorHandle, 0, 1, 2, buf); // [bar1, bar2]
+      if(copied < 2)
+         return "No Trade";
+   
+      double rsi1 = NormalizeDouble(buf[0], 10); // bar1
+      double rsi2 = NormalizeDouble(buf[1], 10); // bar2
+   
+      if(rsi2 <= 50.0 && rsi1 > 50.0) return "Long";
+      if(rsi2 >= 50.0 && rsi1 < 50.0) return "Short";
+   
+      return "No Trade";
+   }
+
+
+   //---TREND FOLLOWING INDICATORS (bar1/bar2 confirmed)
+   if(IndicatorArray[0] == "Sma" || IndicatorArray[0] == "Ema" || IndicatorArray[0] == "Smma" || IndicatorArray[0] == "Lwma" || IndicatorArray[0] == "Frama")
+   {
+      double BufferMA[];
+      ArraySetAsSeries(BufferMA, true);
+
+      int gotMA = CopyBuffer(IndicatorHandle, 0, 1, 2, BufferMA);
+      if(gotMA < 2)
+         return "Fill Error";
+
+      double CurrentMA    = NormalizeDouble(BufferMA[0], 10); // bar1
+      double CurrentPrice = NormalizeDouble(iClose(CurrentSymbol, CurrentPeriod, 1), 10);
+      double PriorMA      = NormalizeDouble(BufferMA[1], 10); // bar2
+      double PriorPrice   = NormalizeDouble(iClose(CurrentSymbol, CurrentPeriod, 2), 10);
 
       if(IndicatorArray[1] == "A")
       {
@@ -345,22 +698,53 @@ string GetIndicatorTrigger(string Indicator, int IndicatorHandle, string Current
       }
       return "Error";
    }
+   
+  // Coppock (0-line CROSS trigger) - bar1/bar2 confirmed
+   // Long  when bar2 <= 0 and bar1 > 0
+   // Short when bar2 >= 0 and bar1 < 0
+   if(IndicatorArray[0] == "Coppock")
+   {
+      if(IndicatorHandle == INVALID_HANDLE || IndicatorHandle <= 0)
+         return "Fill Error";
+   
+      double buf[];
+      ArraySetAsSeries(buf, true);
+   
+      // bar1 = last closed, bar2 = previous closed
+      int copied = CopyBuffer(IndicatorHandle, 0, 1, 2, buf);
+      if(copied < 2)
+         return "Fill Error";
+   
+      double v1 = buf[0]; // bar1
+      double v2 = buf[1]; // bar2
+   
+      // optional: normalize to reduce tiny floating noise around 0
+      v1 = NormalizeDouble(v1, 10);
+      v2 = NormalizeDouble(v2, 10);
+   
+      if(v2 <= 0.0 && v1 > 0.0) return "Long";
+      if(v2 >= 0.0 && v1 < 0.0) return "Short";
+   
+      return "No Trade";
+   }
 
-   // Moving average cross triggers (FIXED: use bar 1 and bar 2 only)
-   if(IndicatorArray[0] == "SmaX" || IndicatorArray[0] == "EmaX" || IndicatorArray[0] == "SmmaX" || IndicatorArray[0] == "LwmaX" ||  IndicatorArray[0] == "FramaX")
+
+   if(IndicatorArray[0] == "SmaX" || IndicatorArray[0] == "EmaX" || IndicatorArray[0] == "SmmaX" || IndicatorArray[0] == "LwmaX" || IndicatorArray[0] == "FramaX")
    {
       double BufferFastMa[];
       double BufferSlowMa[];
-      // FIX: Copy from shift 1 for 2 bars -> [bar1, bar2]
-      bool FillFastMa = CopyBuffer(IndicatorHandle,0,1,2,BufferFastMa);
-      bool FillSlowMa = CopyBuffer(IndicatorHandle,1,1,2,BufferSlowMa);
-      if(!FillFastMa || !FillSlowMa)
+      ArraySetAsSeries(BufferFastMa, true);
+      ArraySetAsSeries(BufferSlowMa, true);
+
+      int gotFast = CopyBuffer(IndicatorHandle, 0, 1, 2, BufferFastMa);
+      int gotSlow = CopyBuffer(IndicatorHandle, 1, 1, 2, BufferSlowMa);
+      if(gotFast < 2 || gotSlow < 2)
          return "Fill Error";
 
-      double CurrentFastMa = NormalizeDouble(BufferFastMa[0],10); // bar 1
-      double CurrentSlowMa = NormalizeDouble(BufferSlowMa[0],10); // bar 1
-      double PriorFastMa   = NormalizeDouble(BufferFastMa[1],10); // bar 2
-      double PriorSlowMa   = NormalizeDouble(BufferSlowMa[1],10); // bar 2
+      double CurrentFastMa = NormalizeDouble(BufferFastMa[0], 10); // bar1
+      double CurrentSlowMa = NormalizeDouble(BufferSlowMa[0], 10); // bar1
+      double PriorFastMa   = NormalizeDouble(BufferFastMa[1], 10); // bar2
+      double PriorSlowMa   = NormalizeDouble(BufferSlowMa[1], 10); // bar2
 
       if(IndicatorArray[1] == "A")
       {
@@ -376,26 +760,53 @@ string GetIndicatorTrigger(string Indicator, int IndicatorHandle, string Current
       }
       return "Error";
    }
+   
+   // HalfTrend trigger (arrow/color flip event) - confirmed bar1
+   // BUY  when UpArrow buffer prints (buffer 2 > 0 on bar1)
+   // SELL when DownArrow buffer prints (buffer 3 > 0 on bar1)
+   if(IndicatorArray[0] == "HalfTrend")
+   {
+      if(IndicatorHandle == INVALID_HANDLE || IndicatorHandle <= 0)
+      {
+         Print("HANDLE FAIL (Trigger): ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+         return "Fill Error";
+      }
+   
+      double up[], dn[];
+      ArraySetAsSeries(up, true);
+      ArraySetAsSeries(dn, true);
+   
+      int gotU = CopyBuffer(IndicatorHandle, 2, 1, 1, up); // UpBuffer bar1
+      int gotD = CopyBuffer(IndicatorHandle, 3, 1, 1, dn); // DownBuffer bar1
+   
+      if(gotU < 1 || gotD < 1)
+         return "No Trade"; // warmup / not ready
+   
+      // Arrow buffers are PRICE values when they occur, otherwise 0.0
+      if(up[0] != 0.0) return "Long";
+      if(dn[0] != 0.0) return "Short";
+   
+      return "No Trade";
+   }
 
-//---VOLATILITY INDICATORS
-   // NOTE: Bb logic left unchanged (complex multi-bar logic). It already uses confirmed iClose shifts in the loop.
 
-//---OSCILLATOR INDICATORS
-   // MACD trigger (FIXED: use bar 1 and bar 2 only)
+   //---OSCILLATOR INDICATORS
    if(IndicatorArray[0] == "Macd")
    {
       double BufferMacd[];
       double BufferSignal[];
-      // FIX: Copy from shift 1 for 2 bars -> [bar1, bar2]
-      bool FillMacd   = CopyBuffer(IndicatorHandle,0,1,2,BufferMacd);
-      bool FillSignal = CopyBuffer(IndicatorHandle,1,1,2,BufferSignal);
-      if(!FillMacd || !FillSignal)
+      ArraySetAsSeries(BufferMacd, true);
+      ArraySetAsSeries(BufferSignal, true);
+
+      int gotMacd   = CopyBuffer(IndicatorHandle, 0, 1, 2, BufferMacd);
+      int gotSignal = CopyBuffer(IndicatorHandle, 1, 1, 2, BufferSignal);
+      if(gotMacd < 2 || gotSignal < 2)
          return "Fill Error";
 
-      double CurrentMacd   = NormalizeDouble(BufferMacd[0],10);   // bar 1
-      double CurrentSignal = NormalizeDouble(BufferSignal[0],10); // bar 1
-      double PriorMacd     = NormalizeDouble(BufferMacd[1],10);   // bar 2
-      double PriorSignal   = NormalizeDouble(BufferSignal[1],10); // bar 2
+      double CurrentMacd   = NormalizeDouble(BufferMacd[0], 10);   // bar1
+      double CurrentSignal = NormalizeDouble(BufferSignal[0], 10); // bar1
+      double PriorMacd     = NormalizeDouble(BufferMacd[1], 10);   // bar2
+      double PriorSignal   = NormalizeDouble(BufferSignal[1], 10); // bar2
 
       if(IndicatorArray[1] == "A")
       {
@@ -412,16 +823,17 @@ string GetIndicatorTrigger(string Indicator, int IndicatorHandle, string Current
       return "Error";
    }
 
-   // AC trigger (FIXED: use bar 1 and bar 2 only)
    if(IndicatorArray[0] == "Ac")
    {
       double BufferAc[];
-      bool FillAc = CopyBuffer(IndicatorHandle,0,1,2,BufferAc); // [bar1, bar2]
-      if(!FillAc)
+      ArraySetAsSeries(BufferAc, true);
+
+      int gotAc = CopyBuffer(IndicatorHandle, 0, 1, 2, BufferAc);
+      if(gotAc < 2)
          return "Fill Error";
 
-      double CurrentAc = NormalizeDouble(BufferAc[0],10); // bar 1
-      double PriorAc   = NormalizeDouble(BufferAc[1],10); // bar 2
+      double CurrentAc = NormalizeDouble(BufferAc[0], 10); // bar1
+      double PriorAc   = NormalizeDouble(BufferAc[1], 10); // bar2
 
       if(IndicatorArray[1] == "A")
       {
@@ -438,28 +850,22 @@ string GetIndicatorTrigger(string Indicator, int IndicatorHandle, string Current
       return "Error";
    }
 
-   // Doda trigger (bar1/bar2 confirmed) - FIX: ensure CopyBuffer arrays are SERIES
    if(IndicatorArray[0] == "Doda")
    {
       double bufF[], bufS[];
-   
       ArraySetAsSeries(bufF, true);
       ArraySetAsSeries(bufS, true);
-   
-      // bar1 and bar2 only (confirmed candles)
-      int gotF = CopyBuffer(IndicatorHandle, 0, 1, 2, bufF); // buffer0 = Filtered (per your indicator code)
-      int gotS = CopyBuffer(IndicatorHandle, 1, 1, 2, bufS); // buffer1 = Signal
+
+      int gotF = CopyBuffer(IndicatorHandle, 0, 1, 2, bufF);
+      int gotS = CopyBuffer(IndicatorHandle, 1, 1, 2, bufS);
       if(gotF < 2 || gotS < 2)
          return "Fill Error";
-   
-      // With SERIES arrays:
-      // buf[0] = bar1 (last closed)
-      // buf[1] = bar2 (previous closed)
-      double curF = NormalizeDouble(bufF[0], 10); // bar 1
-      double curS = NormalizeDouble(bufS[0], 10); // bar 1
-      double preF = NormalizeDouble(bufF[1], 10); // bar 2
-      double preS = NormalizeDouble(bufS[1], 10); // bar 2
-   
+
+      double curF = NormalizeDouble(bufF[0], 10);
+      double curS = NormalizeDouble(bufS[0], 10);
+      double preF = NormalizeDouble(bufF[1], 10);
+      double preS = NormalizeDouble(bufS[1], 10);
+
       if(IndicatorArray[1] == "A")
       {
          if(preF <= preS && curF > curS) return "Long";
@@ -475,17 +881,17 @@ string GetIndicatorTrigger(string Indicator, int IndicatorHandle, string Current
       return "Error";
    }
 
-
-   // PFE trigger (FIXED: use bar 1 and bar 2 only)
    if(IndicatorArray[0] == "Pfe")
    {
       double buf[];
-      bool ok = CopyBuffer(IndicatorHandle, 0, 1, 2, buf); // [bar1, bar2]
-      if(!ok)
+      ArraySetAsSeries(buf, true);
+
+      int got = CopyBuffer(IndicatorHandle, 0, 1, 2, buf);
+      if(got < 2)
          return "Fill Error";
 
-      double cur = NormalizeDouble(buf[0], 10); // bar 1
-      double pre = NormalizeDouble(buf[1], 10); // bar 2
+      double cur = NormalizeDouble(buf[0], 10); // bar1
+      double pre = NormalizeDouble(buf[1], 10); // bar2
 
       if(IndicatorArray[1] == "A")
       {
@@ -502,10 +908,280 @@ string GetIndicatorTrigger(string Indicator, int IndicatorHandle, string Current
       return "Error";
    }
 
-//---PRICE ACTION INDICATORS
-   // NOTE: Don logic left unchanged (complex array indexing tied to its original logic).
+   // AO trigger (color flip) - bar1/bar2 confirmed
+   // buffer 1: 0=Green, 1=Red
+   if(IndicatorArray[0] == "Ao")
+   {
+      double bufColor[];
+      ArraySetAsSeries(bufColor, true);
 
-//---ERROR HANDLING
+      int got = CopyBuffer(IndicatorHandle, 1, 1, 2, bufColor);
+      if(got < 2)
+         return "Fill Error";
+
+      double color1 = bufColor[0]; // bar1
+      double color2 = bufColor[1]; // bar2
+
+      bool bar1Green = (color1 == 0.0);
+      bool bar1Red   = (color1 == 1.0);
+      bool bar2Green = (color2 == 0.0);
+      bool bar2Red   = (color2 == 1.0);
+
+      if(IndicatorArray[1] == "A")
+      {
+         if(bar2Red && bar1Green) return "Long";
+         if(bar2Green && bar1Red) return "Short";
+         return "No Trade";
+      }
+      else if(IndicatorArray[1] == "B")
+      {
+         if(bar2Red && bar1Green) return "Short";
+         if(bar2Green && bar1Red) return "Long";
+         return "No Trade";
+      }
+      return "Error";
+   }
+   
+   // DPO trigger (0-line CROSS) - bar1/bar2 confirmed
+   // Long  if (bar2 <= 0 && bar1 > 0)
+   // Short if (bar2 >= 0 && bar1 < 0)
+   if(IndicatorArray[0] == "Dpo")
+   {
+      if(IndicatorHandle == INVALID_HANDLE || IndicatorHandle <= 0)
+      {
+         Print("HANDLE FAIL (Trigger): ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+         return "Fill Error";
+      }
+   
+      double buf[];
+      ArraySetAsSeries(buf, true);
+   
+      // buffer 0 = DPO output
+      int copied = CopyBuffer(IndicatorHandle, 0, 1, 2, buf); // [bar1, bar2]
+      if(copied < 2)
+      {
+         // Warmup / data not ready
+         // For cross logic, safest is No Trade until we have 2 closed values
+         // (prevents spam "Fill Error" at start)
+         return "No Trade";
+      }
+   
+      double v1 = NormalizeDouble(buf[0], 10); // bar1
+      double v2 = NormalizeDouble(buf[1], 10); // bar2
+   
+      if(v2 <= 0.0 && v1 > 0.0) return "Long";
+      if(v2 >= 0.0 && v1 < 0.0) return "Short";
+   
+      return "No Trade";
+   }
+   
+   // Fisher Transform trigger (Fisher line crosses Signal line) - bar1/bar2 confirmed
+   // Long  if (fisher2 <= signal2 && fisher1 > signal1)
+   // Short if (fisher2 >= signal2 && fisher1 < signal1)
+   // Buffers: 0 = Fisher (val), 2 = Signal
+   if(IndicatorArray[0] == "Fishertransform")
+   {
+      if(IndicatorHandle == INVALID_HANDLE || IndicatorHandle <= 0)
+      {
+         Print("HANDLE FAIL (Trigger): ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+         return "Fill Error";
+      }
+   
+      double fisher[], sig[];
+      ArraySetAsSeries(fisher, true);
+      ArraySetAsSeries(sig, true);
+   
+      int gotF = CopyBuffer(IndicatorHandle, 0, 1, 2, fisher); // [bar1, bar2]
+      int gotS = CopyBuffer(IndicatorHandle, 2, 1, 2, sig);
+   
+      if(gotF < 2 || gotS < 2)
+         return "No Trade";  // warmup / not ready
+   
+      double fisher1 = NormalizeDouble(fisher[0], 10); // bar1
+      double fisher2 = NormalizeDouble(fisher[1], 10); // bar2
+      double sig1    = NormalizeDouble(sig[0], 10);    // bar1
+      double sig2    = NormalizeDouble(sig[1], 10);    // bar2
+   
+      if(fisher2 <= sig2 && fisher1 > sig1) return "Long";
+      if(fisher2 >= sig2 && fisher1 < sig1) return "Short";
+   
+      return "No Trade";
+   }
+   
+   // FisherTransform trigger (Fisher line crosses Trigger line) - bar1/bar2 confirmed
+   // Long  if (fisher2 <= trig2 && fisher1 > trig1)
+   // Short if (fisher2 >= trig2 && fisher1 < trig1)
+   if(IndicatorArray[0] == "FisherTransform")
+   {
+      if(IndicatorHandle == INVALID_HANDLE || IndicatorHandle <= 0)
+      {
+         Print("HANDLE FAIL (Trigger): ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+         return "Fill Error";
+      }
+   
+      double fisher[], trig[];
+      ArraySetAsSeries(fisher, true);
+      ArraySetAsSeries(trig, true);
+   
+      // buffer 0 = Fisher, buffer 1 = Trigger
+      int gotF = CopyBuffer(IndicatorHandle, 0, 1, 2, fisher); // [bar1, bar2]
+      int gotT = CopyBuffer(IndicatorHandle, 1, 1, 2, trig);
+   
+      if(gotF < 2 || gotT < 2)
+         return "No Trade"; // warmup / not ready yet
+   
+      double f1 = NormalizeDouble(fisher[0], 10); // bar1
+      double f2 = NormalizeDouble(fisher[1], 10); // bar2
+      double t1 = NormalizeDouble(trig[0], 10);   // bar1
+      double t2 = NormalizeDouble(trig[1], 10);   // bar2
+   
+      if(f2 <= t2 && f1 > t1) return "Long";
+      if(f2 >= t2 && f1 < t1) return "Short";
+   
+      return "No Trade";
+   }
+   
+   // QQE 2-line CROSS trigger (RSI MA crosses Smoothed) - bar1/bar2 confirmed
+   // Long  if (ma2 <= sm2 && ma1 > sm1)
+   // Short if (ma2 >= sm2 && ma1 < sm1)
+   if(IndicatorArray[0] == "QqeCross")
+   {
+      if(IndicatorHandle == INVALID_HANDLE || IndicatorHandle <= 0)
+         return "Fill Error";
+   
+      double ma[], sm[];
+      ArraySetAsSeries(ma, true);
+      ArraySetAsSeries(sm, true);
+   
+      int gotMa = CopyBuffer(IndicatorHandle, 0, 1, 2, ma); // RSI MA [bar1, bar2]
+      int gotSm = CopyBuffer(IndicatorHandle, 1, 1, 2, sm); // Smoothed [bar1, bar2]
+   
+      if(gotMa < 2 || gotSm < 2)
+         return "No Trade";
+   
+      double ma1 = NormalizeDouble(ma[0], 10);
+      double ma2 = NormalizeDouble(ma[1], 10);
+      double sm1 = NormalizeDouble(sm[0], 10);
+      double sm2 = NormalizeDouble(sm[1], 10);
+   
+      if(ma2 <= sm2 && ma1 > sm1) return "Long";
+      if(ma2 >= sm2 && ma1 < sm1) return "Short";
+   
+      return "No Trade";
+   }
+   
+   // ROC trigger (0-line CROSS) - bar1/bar2 confirmed
+   // Long  if (roc2 <= 0 && roc1 > 0)
+   // Short if (roc2 >= 0 && roc1 < 0)
+   if(IndicatorArray[0] == "Roc")
+   {
+      if(IndicatorHandle == INVALID_HANDLE || IndicatorHandle <= 0)
+         return "Fill Error";
+   
+      double buf[];
+      ArraySetAsSeries(buf, true);
+   
+      int copied = CopyBuffer(IndicatorHandle, 0, 1, 2, buf); // [bar1, bar2]
+      if(copied < 2)
+         return "No Trade"; // warmup
+   
+      double roc1 = NormalizeDouble(buf[0], 10); // bar1
+      double roc2 = NormalizeDouble(buf[1], 10); // bar2
+   
+      if(roc2 <= 0.0 && roc1 > 0.0) return "Long";
+      if(roc2 >= 0.0 && roc1 < 0.0) return "Short";
+   
+      return "No Trade";
+   }
+   
+   // STC trigger (color flip) - bar1/bar2 confirmed
+   // BUY  when color flips to GREEN  (valc becomes 1)
+   // SELL when color flips to ORANGE (valc becomes 2)
+   if(IndicatorArray[0] == "Stc")
+   {
+      if(IndicatorHandle == INVALID_HANDLE || IndicatorHandle <= 0)
+         return "Fill Error";
+   
+      double c[];
+      ArraySetAsSeries(c, true);
+   
+      // buffer 1 = color index
+      int got = CopyBuffer(IndicatorHandle, 1, 1, 2, c); // [bar1, bar2]
+      if(got < 2)
+         return "No Trade";
+   
+      int c1 = (int)c[0]; // bar1
+      int c2 = (int)c[1]; // bar2
+   
+      // Flip to green
+      if(c2 != 1 && c1 == 1) return "Long";
+   
+      // Flip to orange
+      if(c2 != 2 && c1 == 2) return "Short";
+   
+      return "No Trade";
+   }
+   
+   // Stoch RSI K crosses 50 (treat 50 as zero) - bar1/bar2 confirmed
+   // Long  if (k2 <= 50 && k1 > 50)
+   // Short if (k2 >= 50 && k1 < 50)
+   if(IndicatorArray[0] == "StochRsiK50")
+   {
+      if(IndicatorHandle == INVALID_HANDLE || IndicatorHandle <= 0)
+         return "Fill Error";
+   
+      double k[];
+      ArraySetAsSeries(k, true);
+   
+      int gotK = CopyBuffer(IndicatorHandle, 0, 1, 2, k); // K [bar1, bar2]
+      if(gotK < 2)
+         return "No Trade"; // warmup
+   
+      double k1 = NormalizeDouble(k[0], 10); // bar1
+      double k2 = NormalizeDouble(k[1], 10); // bar2
+   
+      if(k2 <= 50.0 && k1 > 50.0) return "Long";
+      if(k2 >= 50.0 && k1 < 50.0) return "Short";
+   
+      return "No Trade";
+   }
+   
+   // SMI trigger (SMI crosses Signal) - bar1/bar2 confirmed
+   // Long  if (smi2 <= sig2 && smi1 > sig1)
+   // Short if (smi2 >= sig2 && smi1 < sig1)
+   if(IndicatorArray[0] == "Smi")
+   {
+      if(IndicatorHandle == INVALID_HANDLE || IndicatorHandle <= 0)
+         return "Fill Error";
+   
+      double smi[], sig[];
+      ArraySetAsSeries(smi, true);
+      ArraySetAsSeries(sig, true);
+   
+      int gotSmi = CopyBuffer(IndicatorHandle, 0, 1, 2, smi); // SMI [bar1, bar2]
+      int gotSig = CopyBuffer(IndicatorHandle, 2, 1, 2, sig); // Signal [bar1, bar2]
+   
+      if(gotSmi < 2 || gotSig < 2)
+         return "No Trade"; // warmup
+   
+      double smi1 = NormalizeDouble(smi[0], 10); // bar1
+      double smi2 = NormalizeDouble(smi[1], 10); // bar2
+      double sig1 = NormalizeDouble(sig[0], 10); // bar1
+      double sig2 = NormalizeDouble(sig[1], 10); // bar2
+   
+      if(smi2 <= sig2 && smi1 > sig1) return "Long";
+      if(smi2 >= sig2 && smi1 < sig1) return "Short";
+   
+      return "No Trade";
+   }
+
+
+
+
+
+
+
+
    return "Error";
 }
 
@@ -514,27 +1190,28 @@ string GetIndicatorTrigger(string Indicator, int IndicatorHandle, string Current
 //+------------------------------------------------------------------+
 string GetIndicatorFilter(string Indicator, int IndicatorHandle, string CurrentSymbol, ENUM_TIMEFRAMES CurrentPeriod) export
 {
-//---SET UP
    string IndicatorArray[];
    int    NumberOfParameters;
-   NumberOfParameters = StringSplit(Indicator, '_', IndicatorArray);
-   ArrayResize(IndicatorArray,NumberOfParameters);
 
-//---CHECK FOR NA INDICATOR
+   NumberOfParameters = StringSplit(Indicator, '_', IndicatorArray);
+   ArrayResize(IndicatorArray, NumberOfParameters);
+
+   //---CHECK FOR NA INDICATOR
    if(IndicatorArray[0] == "Na")
       return "NA";
 
-//---TREND FOLLOWING INDICATORS
-   // Moving average filters (FIXED: use bar 1 only)
-   if(IndicatorArray[0] == "Sma" || IndicatorArray[0] == "Ema" || IndicatorArray[0] == "Smma" || IndicatorArray[0] == "Lwma" ||  IndicatorArray[0] == "Frama")
+   //---TREND FOLLOWING INDICATORS (bar1 only)
+   if(IndicatorArray[0] == "Sma" || IndicatorArray[0] == "Ema" || IndicatorArray[0] == "Smma" || IndicatorArray[0] == "Lwma" || IndicatorArray[0] == "Frama")
    {
       double BufferMA[];
-      bool FillMA = CopyBuffer(IndicatorHandle,0,1,1,BufferMA); // bar 1 only
-      if(!FillMA)
+      ArraySetAsSeries(BufferMA, true);
+
+      int gotMA = CopyBuffer(IndicatorHandle, 0, 1, 1, BufferMA);
+      if(gotMA < 1)
          return "Fill Error";
 
-      double CurrentMA    = NormalizeDouble(BufferMA[0],10); // bar 1
-      double CurrentPrice = NormalizeDouble(iClose(CurrentSymbol,CurrentPeriod,1), 10); // bar 1 close
+      double CurrentMA    = NormalizeDouble(BufferMA[0], 10);
+      double CurrentPrice = NormalizeDouble(iClose(CurrentSymbol, CurrentPeriod, 1), 10);
 
       if(IndicatorArray[1] == "A")
       {
@@ -550,17 +1227,40 @@ string GetIndicatorFilter(string Indicator, int IndicatorHandle, string CurrentS
       }
       return "Error";
    }
+    
+    // Coppock filter (0-line state) - bar1 confirmed
+   if(IndicatorArray[0] == "Coppock")
+   {
+      if(IndicatorHandle == INVALID_HANDLE || IndicatorHandle <= 0)
+         return "Fill Error";
+   
+      double buf[];
+      ArraySetAsSeries(buf, true);
+   
+      int copied = CopyBuffer(IndicatorHandle, 0, 1, 1, buf);
+      if(copied < 1)
+         return "Fill Error";
+   
+      double v = buf[0]; // bar1
+   
+      if(v > 0.0) return "Long";
+      if(v < 0.0) return "Short";
+      return "No Trade";
+   }
 
-//---MOMENTUM INDICATORS
-   // RSI filter (FIXED: use bar 1 only)
+
+
+   //---MOMENTUM INDICATORS
    if(IndicatorArray[0] == "Rsi")
    {
       double BufferRsi[];
-      bool FillRsi = CopyBuffer(IndicatorHandle,0,1,1,BufferRsi); // bar 1 only
-      if(!FillRsi)
+      ArraySetAsSeries(BufferRsi, true);
+
+      int gotRsi = CopyBuffer(IndicatorHandle, 0, 1, 1, BufferRsi);
+      if(gotRsi < 1)
          return "Fill Error";
 
-      double CurrentRsi = NormalizeDouble(BufferRsi[0],10);
+      double CurrentRsi = NormalizeDouble(BufferRsi[0], 10);
       int UpperBand = StringToInteger(IndicatorArray[3]);
       int LowerBand = StringToInteger(IndicatorArray[4]);
 
@@ -579,19 +1279,47 @@ string GetIndicatorFilter(string Indicator, int IndicatorHandle, string CurrentS
       return "Error";
    }
 
-//---VOLATILITY INDICATORS
-   // ADMA filter (FIXED: use bar 1 only)
+   if(IndicatorArray[0] == "Cci")
+   {
+      double bufCCI[];
+      ArraySetAsSeries(bufCCI, true);
+
+      int got = CopyBuffer(IndicatorHandle, 0, 1, 1, bufCCI);
+      if(got < 1)
+         return "Fill Error";
+
+      double cci1 = NormalizeDouble(bufCCI[0], 10);
+
+      if(IndicatorArray[1] == "A")
+      {
+         if(cci1 > 0.0) return "Long";
+         if(cci1 < 0.0) return "Short";
+         return "No Trade";
+      }
+      else if(IndicatorArray[1] == "B")
+      {
+         if(cci1 > 0.0) return "Short";
+         if(cci1 < 0.0) return "Long";
+         return "No Trade";
+      }
+      return "Error";
+   }
+
+   //---VOLATILITY INDICATORS
    if(IndicatorArray[0] == "Adma")
    {
       double BufferAd[];
       double BufferMa[];
-      bool FillAd = CopyBuffer(IndicatorHandle,0,1,1,BufferAd);
-      bool FillMa = CopyBuffer(IndicatorHandle,1,1,1,BufferMa);
-      if(!FillAd || !FillMa)
+      ArraySetAsSeries(BufferAd, true);
+      ArraySetAsSeries(BufferMa, true);
+
+      int gotAd = CopyBuffer(IndicatorHandle, 0, 1, 1, BufferAd);
+      int gotMa = CopyBuffer(IndicatorHandle, 1, 1, 1, BufferMa);
+      if(gotAd < 1 || gotMa < 1)
          return "Fill Error";
 
-      double CurrentAd = NormalizeDouble(BufferAd[0],10);
-      double CurrentMa = NormalizeDouble(BufferMa[0],10);
+      double CurrentAd = NormalizeDouble(BufferAd[0], 10);
+      double CurrentMa = NormalizeDouble(BufferMa[0], 10);
 
       if(IndicatorArray[1] == "A")
       {
@@ -608,19 +1336,21 @@ string GetIndicatorFilter(string Indicator, int IndicatorHandle, string CurrentS
       return "Error";
    }
 
-//---OSCILLATOR INDICATORS
-   // MACD filter (FIXED: use bar 1 only)
+   //---OSCILLATOR INDICATORS
    if(IndicatorArray[0] == "Macd")
    {
       double BufferMacd[];
       double BufferSignal[];
-      bool FillMacd   = CopyBuffer(IndicatorHandle,0,1,1,BufferMacd);
-      bool FillSignal = CopyBuffer(IndicatorHandle,1,1,1,BufferSignal);
-      if(!FillMacd || !FillSignal)
+      ArraySetAsSeries(BufferMacd, true);
+      ArraySetAsSeries(BufferSignal, true);
+
+      int gotMacd   = CopyBuffer(IndicatorHandle, 0, 1, 1, BufferMacd);
+      int gotSignal = CopyBuffer(IndicatorHandle, 1, 1, 1, BufferSignal);
+      if(gotMacd < 1 || gotSignal < 1)
          return "Fill Error";
 
-      double CurrentMacd   = NormalizeDouble(BufferMacd[0],10);
-      double CurrentSignal = NormalizeDouble(BufferSignal[0],10);
+      double CurrentMacd   = NormalizeDouble(BufferMacd[0], 10);
+      double CurrentSignal = NormalizeDouble(BufferSignal[0], 10);
 
       if(IndicatorArray[1] == "A")
       {
@@ -637,12 +1367,13 @@ string GetIndicatorFilter(string Indicator, int IndicatorHandle, string CurrentS
       return "Error";
    }
 
-   // PFE filter (already confirmed-bar; kept)
    if(IndicatorArray[0] == "Pfe")
    {
       double buf[];
-      bool ok = CopyBuffer(IndicatorHandle, 0, 1, 1, buf); // bar 1
-      if(!ok)
+      ArraySetAsSeries(buf, true);
+
+      int got = CopyBuffer(IndicatorHandle, 0, 1, 1, buf);
+      if(got < 1)
          return "Fill Error";
 
       double cur = NormalizeDouble(buf[0], 10);
@@ -662,15 +1393,16 @@ string GetIndicatorFilter(string Indicator, int IndicatorHandle, string CurrentS
       return "Error";
    }
 
-   // AC filter (FIXED: use bar 1 only)
    if(IndicatorArray[0] == "Ac")
    {
       double BufferAc[];
-      bool FillAc = CopyBuffer(IndicatorHandle,0,1,1,BufferAc); // bar 1
-      if(!FillAc)
+      ArraySetAsSeries(BufferAc, true);
+
+      int gotAc = CopyBuffer(IndicatorHandle, 0, 1, 1, BufferAc);
+      if(gotAc < 1)
          return "Fill Error";
 
-      double CurrentAc = NormalizeDouble(BufferAc[0],10);
+      double CurrentAc = NormalizeDouble(BufferAc[0], 10);
 
       if(IndicatorArray[1] == "A")
       {
@@ -687,41 +1419,89 @@ string GetIndicatorFilter(string Indicator, int IndicatorHandle, string CurrentS
       return "Error";
    }
 
-   // Doda filter (bar1 confirmed) - FIX: ensure CopyBuffer arrays are SERIES
-      if(IndicatorArray[0] == "Doda")
+   if(IndicatorArray[0] == "Doda")
+   {
+      double bufF[], bufS[];
+      ArraySetAsSeries(bufF, true);
+      ArraySetAsSeries(bufS, true);
+
+      int gotF = CopyBuffer(IndicatorHandle, 0, 1, 1, bufF);
+      int gotS = CopyBuffer(IndicatorHandle, 1, 1, 1, bufS);
+      if(gotF < 1 || gotS < 1)
+         return "Fill Error";
+
+      double curF = NormalizeDouble(bufF[0], 10);
+      double curS = NormalizeDouble(bufS[0], 10);
+
+      if(IndicatorArray[1] == "A")
       {
-         double bufF[], bufS[];
-      
-         ArraySetAsSeries(bufF, true);
-         ArraySetAsSeries(bufS, true);
-      
-         // bar1 only (confirmed candle)
-         int gotF = CopyBuffer(IndicatorHandle, 0, 1, 1, bufF); // Filtered
-         int gotS = CopyBuffer(IndicatorHandle, 1, 1, 1, bufS); // Signal
-         if(gotF < 1 || gotS < 1)
-            return "Fill Error";
-      
-         // SERIES: buf[0] = bar1
-         double curF = NormalizeDouble(bufF[0], 10);
-         double curS = NormalizeDouble(bufS[0], 10);
-      
-         if(IndicatorArray[1] == "A")
-         {
-            if(curF > curS) return "Long";
-            if(curF < curS) return "Short";
-            return "No Trade";
-         }
-         else if(IndicatorArray[1] == "B")
-         {
-            if(curF > curS) return "Short";
-            if(curF < curS) return "Long";
-            return "No Trade";
-         }
-         return "Error";
+         if(curF > curS) return "Long";
+         if(curF < curS) return "Short";
+         return "No Trade";
       }
+      else if(IndicatorArray[1] == "B")
+      {
+         if(curF > curS) return "Short";
+         if(curF < curS) return "Long";
+         return "No Trade";
+      }
+      return "Error";
+   }
+
+   // AO filter (color state) - bar1 confirmed
+   if(IndicatorArray[0] == "Ao")
+   {
+      double bufColor[];
+      ArraySetAsSeries(bufColor, true);
+
+      int got = CopyBuffer(IndicatorHandle, 1, 1, 1, bufColor);
+      if(got < 1)
+         return "Fill Error";
+
+      double color1 = bufColor[0];
+
+      bool bar1Green = (color1 == 0.0);
+      bool bar1Red   = (color1 == 1.0);
+
+      if(IndicatorArray[1] == "A")
+      {
+         if(bar1Green) return "Long";
+         if(bar1Red)   return "Short";
+         return "No Trade";
+      }
+      else if(IndicatorArray[1] == "B")
+      {
+         if(bar1Green) return "Short";
+         if(bar1Red)   return "Long";
+         return "No Trade";
+      }
+      return "Error";
+   }
+   
+   // DPO filter (0-line STATE) - bar1 confirmed
+   if(IndicatorArray[0] == "Dpo")
+   {
+      if(IndicatorHandle == INVALID_HANDLE || IndicatorHandle <= 0)
+      {
+         Print("HANDLE FAIL (Filter): ", Indicator, " | sym=", CurrentSymbol, " | err=", GetLastError());
+         return "Fill Error";
+      }
+   
+      double buf[];
+      ArraySetAsSeries(buf, true);
+   
+      int copied = CopyBuffer(IndicatorHandle, 0, 1, 1, buf); // bar1 only
+      if(copied < 1)
+         return "No Trade";
+   
+      double v = NormalizeDouble(buf[0], 10);
+   
+      if(v > 0.0) return "Long";
+      if(v < 0.0) return "Short";
+      return "No Trade";
+   }
 
 
-//---ERROR HANDLING
    return "Error";
 }
 
@@ -731,12 +1511,13 @@ string GetIndicatorFilter(string Indicator, int IndicatorHandle, string CurrentS
 double GetIndicatorValue(int IndicatorHandle, int BufferValue) export
 {
    double Buffer[];
-   // NOTE: kept unchanged to avoid breaking any existing uses.
-   bool Fill = CopyBuffer(IndicatorHandle,BufferValue,0,2,Buffer);
-   if(!Fill)
-      return 0;
+   ArraySetAsSeries(Buffer, true);
 
-   double Value = NormalizeDouble(Buffer[0],10);
-   return Value;
+   // Return bar1 (confirmed candle) by default
+   int got = CopyBuffer(IndicatorHandle, BufferValue, 1, 1, Buffer);
+   if(got < 1)
+      return 0.0;
+
+   return NormalizeDouble(Buffer[0], 10);
 }
 //+------------------------------------------------------------------+
